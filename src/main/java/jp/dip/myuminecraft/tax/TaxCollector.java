@@ -21,23 +21,23 @@ public class TaxCollector {
     double middleClassTaxRate;
     double highClassTaxRate;
     String taxMessage;
-	boolean isEnabled;
-	long tickInterval = 1000 / 20;
-	TaxCollectorTask scheduledTask;
+    boolean isEnabled;
+    long tickInterval = 1000 / 20;
+    TaxCollectorTask scheduledTask;
     
     public TaxCollector(JavaPlugin plugin) throws Exception {
-    	plugin.getServer().getLogger().info("TaxCollector started");
+        plugin.getServer().getLogger().info("TaxCollector started");
         this.plugin = plugin;
 
         isEnabled = true;
 
         RegisteredServiceProvider<Economy> economyProvider = 
-        		plugin.getServer().getServicesManager()
-        		.getRegistration(net.milkbowl.vault.economy.Economy.class);
+            plugin.getServer().getServicesManager()
+            .getRegistration(net.milkbowl.vault.economy.Economy.class);
         
         if (economyProvider == null) {
-        	String msg = String.format("[%s] - Disabled due to no Vault dependency found!", plugin.getDescription().getName());
-        	throw new Exception(msg);
+            String msg = String.format("[%s] - Disabled due to no Vault dependency found!", plugin.getDescription().getName());
+            throw new Exception(msg);
         }
 
         economy = economyProvider.getProvider();
@@ -61,70 +61,70 @@ public class TaxCollector {
     }
     
     public void disable() {
-    	this.isEnabled = false;
-    	scheduledTask.cancel();
+        this.isEnabled = false;
+        scheduledTask.cancel();
     }
- 
+
     public void collect() {
-    	long startTime = System.currentTimeMillis();
-    	long endTime = startTime + 2;
-    	while (isEnabled && System.currentTimeMillis() < endTime) {
+        long startTime = System.currentTimeMillis();
+        long endTime = startTime + 2;
+        while (isEnabled && System.currentTimeMillis() < endTime) {
 
-        	if (currentPlayerIndex < 0) {
-        		playerList = plugin.getServer().getOfflinePlayers();
-        		currentPlayerIndex = 0;
-        		continue;
-        	}
+            if (currentPlayerIndex < 0) {
+                playerList = plugin.getServer().getOfflinePlayers();
+                currentPlayerIndex = 0;
+                continue;
+            }
 
-        	OfflinePlayer player = playerList[currentPlayerIndex];
-        	double balance = economy.getBalance(player.getName());
+            OfflinePlayer player = playerList[currentPlayerIndex];
+            double balance = economy.getBalance(player.getName());
 
-        	double rate = 1.0;
-        	if (balance < middleClassStart) {
-        		rate = lowClassTaxRate;
-        	} else if (balance < highClassStart) {
-        		rate = middleClassTaxRate;
-        	} else {
-        		rate = highClassTaxRate;
-        	}
-        	
-        	double tax;
-        	if (balance < 0) {
-        		tax = 0;
-        	} else {
-    			tax = balance * rate;
-        		if (balance < tax) {
-            		tax = balance;
-        		}
-        	}
-        	tax = Math.floor(tax);
-        	
-        	EconomyResponse response = economy.withdrawPlayer(player.getName(), tax);
-        	if (response.transactionSuccess()) {
-            	if (0 < tax && player.isOnline()) {
-            		player.getPlayer().sendMessage(String.format(taxMessage, (int)tax));
-            	}
-        	} else {
-        		plugin.getServer().getLogger().info(response.toString());
-        	}
+            double rate = 1.0;
+            if (balance < middleClassStart) {
+                rate = lowClassTaxRate;
+            } else if (balance < highClassStart) {
+                rate = middleClassTaxRate;
+            } else {
+                rate = highClassTaxRate;
+            }
+                
+            double tax;
+            if (balance < 0) {
+                tax = 0;
+            } else {
+                tax = balance * rate;
+                if (balance < tax) {
+                    tax = balance;
+                }
+            }
+            tax = Math.floor(tax);
+                
+            EconomyResponse response = economy.withdrawPlayer(player.getName(), tax);
+            if (response.transactionSuccess()) {
+                if (0 < tax && player.isOnline()) {
+                    player.getPlayer().sendMessage(String.format(taxMessage, (int)tax));
+                }
+            } else {
+                plugin.getServer().getLogger().info(response.toString());
+            }
 
-    		if (playerList.length <= ++currentPlayerIndex) {
-    			playerList = null;
-    			currentPlayerIndex = -1;
-    			while (taxIntervalStart <= System.currentTimeMillis()) {
-    				taxIntervalStart += taxPeriod;
-    			}
-    			scheduledTask = new TaxCollectorTask(this);
-    			scheduledTask.runTaskLater(plugin, (taxIntervalStart - System.currentTimeMillis()) / tickInterval);
+            if (playerList.length <= ++currentPlayerIndex) {
+                playerList = null;
+                currentPlayerIndex = -1;
+                while (taxIntervalStart <= System.currentTimeMillis()) {
+                    taxIntervalStart += taxPeriod;
+                }
+                scheduledTask = new TaxCollectorTask(this);
+                scheduledTask.runTaskLater(plugin, (taxIntervalStart - System.currentTimeMillis()) / tickInterval);
 
-    			return;
-    		}
-    	}
+                return;
+            }
+        }
 
-    	if (isEnabled) {
-			scheduledTask = new TaxCollectorTask(this);
-			scheduledTask.runTask(plugin);
-    	}
+        if (isEnabled) {
+            scheduledTask = new TaxCollectorTask(this);
+            scheduledTask.runTask(plugin);
+        }
     }
 
 }
