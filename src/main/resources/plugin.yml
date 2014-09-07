@@ -1,0 +1,4 @@
+name: Tax
+main: jp.dip.myuminecraft.tax.Tax
+version: 0.0.1-SNAPSHOT
+depends: Vault
