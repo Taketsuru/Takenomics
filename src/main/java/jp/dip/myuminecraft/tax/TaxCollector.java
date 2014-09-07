@@ -10,6 +10,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 public class TaxCollector {
 
     JavaPlugin plugin;
+    Messages messages;
     Economy economy;
     int currentPlayerIndex;
     OfflinePlayer[] playerList;
@@ -20,14 +21,14 @@ public class TaxCollector {
     double lowClassTaxRate;
     double middleClassTaxRate;
     double highClassTaxRate;
-    String taxMessage;
     boolean isEnabled;
     long tickInterval = 1000 / 20;
     TaxCollectorTask scheduledTask;
     
-    public TaxCollector(JavaPlugin plugin) throws Exception {
+    public TaxCollector(JavaPlugin plugin, Messages messages) throws Exception {
         plugin.getServer().getLogger().info("TaxCollector started");
         this.plugin = plugin;
+        this.messages = messages;
 
         isEnabled = true;
 
@@ -46,8 +47,6 @@ public class TaxCollector {
         taxPeriod = 1000 * 60 * 60; // 1 hour
         // taxPeriod = 1000 * 20; // 20 seconds
         taxIntervalStart = System.currentTimeMillis() + taxPeriod;
-
-        taxMessage = "税金を$%d徴収しました";
 
         middleClassStart = 10000;
         highClassStart = 1000000;
@@ -102,7 +101,7 @@ public class TaxCollector {
             EconomyResponse response = economy.withdrawPlayer(player.getName(), tax);
             if (response.transactionSuccess()) {
                 if (0 < tax && player.isOnline()) {
-                    player.getPlayer().sendMessage(String.format(taxMessage, (int)tax));
+                    player.getPlayer().sendMessage(String.format(messages.getString("taxCollected"), (int)tax));
                 }
             } else {
                 plugin.getServer().getLogger().info(response.toString());
