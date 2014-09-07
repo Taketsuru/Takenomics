@@ -14,6 +14,7 @@ public class Tax extends JavaPlugin implements Listener {
     @Override
     public void onEnable() {
         try {
+            saveDefaultConfig();
             String language = "ja";
             String country = "JP";
             locale = new Locale(language, country);

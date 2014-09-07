@@ -1,64 +1,123 @@
 package jp.dip.myuminecraft.tax;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Vector;
+
 import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.economy.EconomyResponse;
 
 import org.bukkit.OfflinePlayer;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class TaxCollector {
 
-    JavaPlugin plugin;
-    Messages messages;
-    Economy economy;
-    int currentPlayerIndex;
-    OfflinePlayer[] playerList;
-    long taxIntervalStart;
-    long taxPeriod;
-    double middleClassStart;
-    double highClassStart;
-    double lowClassTaxRate;
-    double middleClassTaxRate;
-    double highClassTaxRate;
-    boolean isEnabled;
-    long tickInterval = 1000 / 20;
-    TaxCollectorTask scheduledTask;
-    
+    class TaxClass {
+        double min;
+        double rate;
+
+        TaxClass(double min, double rate) {
+            this.min = min;
+            this.rate = rate;
+        }
+    }
+
+    static final long maxPeriodInSec = 60 * 60 * 24 * 365;
+    static final long tickInterval   = 1000 / 20;
+
+    JavaPlugin        plugin;
+    Messages          messages;
+    Vector<TaxClass>  classes;
+    Economy           economy;
+    int               currentPlayerIndex;
+    OfflinePlayer[]   playerList;
+    long              taxIntervalStart;
+    long              taxPeriod;
+    boolean           isEnabled;
+    TaxCollectorTask  scheduledTask;
+
     public TaxCollector(JavaPlugin plugin, Messages messages) throws Exception {
-        plugin.getServer().getLogger().info("TaxCollector started");
+
         this.plugin = plugin;
         this.messages = messages;
 
+        String pluginName = plugin.getDescription().getName();
+
+        FileConfiguration config = plugin.getConfig();
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> classConfig = (List<Map<String, Object>>) config
+                .getList("classes");
+        if (classConfig == null) {
+            String msg = String.format(
+                    "[%s] - Can't find class configurations.", pluginName);
+            throw new Exception(msg);
+        }
+
+        classes = new Vector<TaxClass>();
+        int index = 0;
+        for (Map<String, Object> entry : classConfig) {
+            String[] doubleFields = { "min", "rate" };
+            double values[] = new double[doubleFields.length];
+
+            int fieldIx = 0;
+            for (String field : doubleFields) {
+                Object value = entry.get(field);
+
+                if (value == null) {
+                    String msg = String
+                            .format("[%s] - %d-th class doesn't have '%s' field.",
+                                    pluginName, index + 1, field);
+                    throw new Exception(msg);
+                }
+
+                if (! (value instanceof Number)) {
+                    String msg = String
+                            .format("[%s] '%s' field of %d-th class has an invalid value.",
+                                    pluginName, field, index + 1);
+                    throw new Exception(msg);
+                }
+
+                values[fieldIx] = ((Number) value).doubleValue();
+                ++fieldIx;
+            }
+
+            classes.add(new TaxClass(values[0], values[1]));
+            ++index;
+        }
+
+        long taxPeriodInSec = config.getLong("taxPeriod");
+        if (taxPeriodInSec <= 0 || maxPeriodInSec < taxPeriodInSec) {
+            String msg = String.format("[%s] taxPeriod is too large. (max: %d)",
+                    pluginName, maxPeriodInSec);
+            throw new Exception(msg);
+        }
+        taxPeriod = taxPeriodInSec * 1000;
+
         isEnabled = true;
 
-        RegisteredServiceProvider<Economy> economyProvider = 
-            plugin.getServer().getServicesManager()
-            .getRegistration(net.milkbowl.vault.economy.Economy.class);
-        
+        RegisteredServiceProvider<Economy> economyProvider = plugin.getServer()
+                .getServicesManager()
+                .getRegistration(net.milkbowl.vault.economy.Economy.class);
+
         if (economyProvider == null) {
-            String msg = String.format("[%s] - Disabled due to no Vault dependency found!", plugin.getDescription().getName());
+            String msg = String.format(
+                    "[%s] Disabled due to no Vault dependency found!", pluginName);
             throw new Exception(msg);
         }
 
         economy = economyProvider.getProvider();
         currentPlayerIndex = -1;
-        
-        taxPeriod = 1000 * 60 * 60; // 1 hour
-        // taxPeriod = 1000 * 20; // 20 seconds
+
         taxIntervalStart = System.currentTimeMillis() + taxPeriod;
-
-        middleClassStart = 10000;
-        highClassStart = 1000000;
-
-        lowClassTaxRate = 0;
-        middleClassTaxRate = 0.001;
-        highClassTaxRate = 0.03;
 
         scheduledTask = new TaxCollectorTask(this);
         scheduledTask.runTaskLater(plugin, taxPeriod / tickInterval);
     }
-    
+
     public void disable() {
         this.isEnabled = false;
         scheduledTask.cancel();
@@ -78,15 +137,14 @@ public class TaxCollector {
             OfflinePlayer player = playerList[currentPlayerIndex];
             double balance = economy.getBalance(player.getName());
 
-            double rate = 1.0;
-            if (balance < middleClassStart) {
-                rate = lowClassTaxRate;
-            } else if (balance < highClassStart) {
-                rate = middleClassTaxRate;
-            } else {
-                rate = highClassTaxRate;
+            double rate = 0.0;
+            for (TaxClass tc : classes) {
+                if (balance < tc.min) {
+                    break;
+                }
+                rate = tc.rate;
             }
-                
+
             double tax;
             if (balance < 0) {
                 tax = 0;
@@ -97,24 +155,40 @@ public class TaxCollector {
                 }
             }
             tax = Math.floor(tax);
-                
-            EconomyResponse response = economy.withdrawPlayer(player.getName(), tax);
-            if (response.transactionSuccess()) {
-                if (0 < tax && player.isOnline()) {
-                    player.getPlayer().sendMessage(String.format(messages.getString("taxCollected"), (int)tax));
+
+            if (0 < tax) {
+                EconomyResponse response = economy.withdrawPlayer(player.getName(), tax);
+                if (response.transactionSuccess()) {
+                    if (player.isOnline()) {
+                        player.getPlayer().sendMessage(
+                                String.format(messages.getString("taxCollected"),
+                                        (long) tax));
+                    }
+                    plugin.getServer().getLogger().info(String.format("Taxes collected from %s: %.02f rate:%f tax:%.02f",
+                            player.getName(),
+                            balance, rate, tax)); 
+                } else {
+                    plugin.getServer().getLogger().info(response.toString());
                 }
-            } else {
-                plugin.getServer().getLogger().info(response.toString());
             }
 
             if (playerList.length <= ++currentPlayerIndex) {
                 playerList = null;
                 currentPlayerIndex = -1;
+                int count = 0;
                 while (taxIntervalStart <= System.currentTimeMillis()) {
                     taxIntervalStart += taxPeriod;
+                    ++count;
+                }
+                if (1 < count) {
+                    plugin.getServer().getLogger()
+                        .warning(String.format("[%s] Server overloaded or tickPeriod is too small.",
+                                 plugin.getDescription().getName()));
                 }
                 scheduledTask = new TaxCollectorTask(this);
-                scheduledTask.runTaskLater(plugin, (taxIntervalStart - System.currentTimeMillis()) / tickInterval);
+                scheduledTask.runTaskLater(plugin,
+                        (taxIntervalStart - System.currentTimeMillis())
+                                / tickInterval);
 
                 return;
             }

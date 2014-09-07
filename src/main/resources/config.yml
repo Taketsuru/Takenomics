@@ -1,0 +1,7 @@
+classes:
+- min: 10000
+  rate: 0.001
+- min: 1000000
+  rate: 0.03
+
+taxPeriod: 3600
