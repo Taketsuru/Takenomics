@@ -39,6 +39,9 @@ public class Tax extends JavaPlugin implements Listener {
             collector = new TaxCollector(this, messages);
         } catch (Throwable th) {
             getLogger().severe(th.toString());
+            for (StackTraceElement e : th.getStackTrace()) {
+                getLogger().severe(e.toString());
+            }
             getServer().getPluginManager().disablePlugin(this);
         }
     }
