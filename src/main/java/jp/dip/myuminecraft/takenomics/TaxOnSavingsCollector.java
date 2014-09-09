@@ -25,19 +25,6 @@ public class TaxOnSavingsCollector {
         }
     }
 
-    class CollectorTask extends BukkitRunnable {
-        TaxOnSavingsCollector collector;
-
-        CollectorTask(TaxOnSavingsCollector collector) {
-            this.collector = collector;
-        }
-
-        @Override
-        public void run() {
-            collector.collect();
-        }
-    }
-
     static final long maxPeriodInSec = 60 * 60 * 24 * 365;
     static final long tickInterval   = 1000 / 20;
 
