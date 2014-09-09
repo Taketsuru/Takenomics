@@ -11,6 +11,7 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitRunnable;
 
 public class TaxOnSavingsCollector {
 
@@ -21,6 +22,19 @@ public class TaxOnSavingsCollector {
         TaxClass(double min, double rate) {
             this.min = min;
             this.rate = rate;
+        }
+    }
+
+    class CollectorTask extends BukkitRunnable {
+        TaxOnSavingsCollector collector;
+
+        CollectorTask(TaxOnSavingsCollector collector) {
+            this.collector = collector;
+        }
+
+        @Override
+        public void run() {
+            collector.collect();
         }
     }
 
@@ -37,7 +51,7 @@ public class TaxOnSavingsCollector {
     long              taxIntervalStart;
     long              taxPeriod;
     boolean           isEnabled;
-    TaxCollectorTask  scheduledTask;
+    BukkitRunnable    scheduledTask;
 
     public TaxOnSavingsCollector(JavaPlugin plugin, Messages messages, TaxLogger logger) throws Exception {
         this.plugin = plugin;
@@ -114,7 +128,7 @@ public class TaxOnSavingsCollector {
 
         taxIntervalStart = System.currentTimeMillis() + taxPeriod;
 
-        scheduledTask = new TaxCollectorTask(this);
+        scheduledTask = newCollector();
         scheduledTask.runTaskLater(plugin, taxPeriod / tickInterval);
     }
 
@@ -189,7 +203,7 @@ public class TaxOnSavingsCollector {
                         .warning(String.format("[%s] Server overloaded or tickPeriod is too small.",
                                  plugin.getDescription().getName()));
                 }
-                scheduledTask = new TaxCollectorTask(this);
+                scheduledTask = newCollector();
                 scheduledTask.runTaskLater(plugin,
                         (taxIntervalStart - System.currentTimeMillis())
                                 / tickInterval);
@@ -199,9 +213,16 @@ public class TaxOnSavingsCollector {
         }
 
         if (isEnabled) {
-            scheduledTask = new TaxCollectorTask(this);
+            scheduledTask = newCollector();
             scheduledTask.runTask(plugin);
         }
     }
 
+    BukkitRunnable newCollector() {
+        return new BukkitRunnable() {
+            public void run() {
+                collect();
+            }
+        };
+    }
 }
