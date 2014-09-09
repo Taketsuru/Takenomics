@@ -8,7 +8,6 @@ import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.economy.EconomyResponse;
 
 import org.bukkit.OfflinePlayer;
-import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -30,6 +29,7 @@ public class TaxCollector {
 
     JavaPlugin        plugin;
     Messages          messages;
+    TaxLogger         logger;
     Vector<TaxClass>  classes;
     Economy           economy;
     int               currentPlayerIndex;
@@ -39,10 +39,10 @@ public class TaxCollector {
     boolean           isEnabled;
     TaxCollectorTask  scheduledTask;
 
-    public TaxCollector(JavaPlugin plugin, Messages messages) throws Exception {
-
+    public TaxCollector(JavaPlugin plugin, Messages messages, TaxLogger logger) throws Exception {
         this.plugin = plugin;
         this.messages = messages;
+        this.logger = logger;
 
         String pluginName = plugin.getDescription().getName();
 
@@ -126,7 +126,12 @@ public class TaxCollector {
     public void collect() {
         long startTime = System.currentTimeMillis();
         long endTime = startTime + 2;
-        while (isEnabled && System.currentTimeMillis() < endTime) {
+        while (isEnabled) {
+            
+            long current = System.currentTimeMillis();
+            if (endTime <= current) {
+                break;
+            }
 
             if (currentPlayerIndex < 0) {
                 playerList = plugin.getServer().getOfflinePlayers();
@@ -166,7 +171,8 @@ public class TaxCollector {
                     }
                     plugin.getServer().getLogger().info(String.format("Taxes collected from %s: %.02f rate:%f tax:%.02f",
                             player.getName(),
-                            balance, rate, tax)); 
+                            balance, rate, tax));
+                    logger.put(current, player.getName(), balance, rate);
                 } else {
                     plugin.getServer().getLogger().info(response.toString());
                 }

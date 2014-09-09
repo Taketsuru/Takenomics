@@ -12,6 +12,7 @@ public class Tax extends JavaPlugin implements Listener {
     Locale       locale;
     Messages     messages;
     TaxCollector collector;
+    TaxLogger    logger;
 
     @Override
     public void onEnable() {
@@ -36,7 +37,8 @@ public class Tax extends JavaPlugin implements Listener {
             }
 
             messages = new Messages(locale);
-            collector = new TaxCollector(this, messages);
+            logger = new TaxLogger(this);
+            collector = new TaxCollector(this, messages, logger);
         } catch (Throwable th) {
             getLogger().severe(th.toString());
             for (StackTraceElement e : th.getStackTrace()) {
@@ -53,6 +55,10 @@ public class Tax extends JavaPlugin implements Listener {
         if (collector != null) {
             collector.disable();
             collector = null;
+        }
+        if (logger != null) {
+            logger.disable();
+            logger = null;
         }
     }
 

@@ -4,4 +4,8 @@ classes:
 - min: 1000000
   rate: 0.03
 
+log:
+  enable: false
+  path: tax.log
+
 taxPeriod: 3600
