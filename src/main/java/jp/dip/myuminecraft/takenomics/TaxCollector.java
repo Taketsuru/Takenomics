@@ -1,4 +1,4 @@
-package jp.dip.myuminecraft.tax;
+package jp.dip.myuminecraft.takenomics;
 
 import java.util.List;
 import java.util.Map;

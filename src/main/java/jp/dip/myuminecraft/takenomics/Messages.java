@@ -1,4 +1,4 @@
-package jp.dip.myuminecraft.tax;
+package jp.dip.myuminecraft.takenomics;
 
 import java.io.UnsupportedEncodingException;
 import java.util.Locale;

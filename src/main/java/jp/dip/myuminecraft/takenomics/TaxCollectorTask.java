@@ -1,4 +1,4 @@
-package jp.dip.myuminecraft.tax;
+package jp.dip.myuminecraft.takenomics;
 
 import org.bukkit.scheduler.BukkitRunnable;
 

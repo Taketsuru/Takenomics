@@ -1,4 +1,4 @@
-package jp.dip.myuminecraft.tax;
+package jp.dip.myuminecraft.takenomics;
 
 import java.util.IllformedLocaleException;
 import java.util.Locale;
@@ -7,7 +7,7 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.java.JavaPlugin;
 
-public class Tax extends JavaPlugin implements Listener {
+public class Takenomics extends JavaPlugin implements Listener {
 
     Locale       locale;
     Messages     messages;
