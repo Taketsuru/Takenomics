@@ -169,9 +169,7 @@ public class TaxCollector {
                                 String.format(messages.getString("taxCollected"),
                                         (long) tax));
                     }
-                    plugin.getServer().getLogger().info(String.format("Taxes collected from %s: %.02f rate:%f tax:%.02f",
-                            player.getName(),
-                            balance, rate, tax));
+
                     logger.put(current, player.getName(), balance, rate);
                 } else {
                     plugin.getServer().getLogger().info(response.toString());
