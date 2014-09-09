@@ -12,7 +12,7 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 
-public class TaxCollector {
+public class TaxOnSavingsCollector {
 
     class TaxClass {
         double min;
@@ -39,7 +39,7 @@ public class TaxCollector {
     boolean           isEnabled;
     TaxCollectorTask  scheduledTask;
 
-    public TaxCollector(JavaPlugin plugin, Messages messages, TaxLogger logger) throws Exception {
+    public TaxOnSavingsCollector(JavaPlugin plugin, Messages messages, TaxLogger logger) throws Exception {
         this.plugin = plugin;
         this.messages = messages;
         this.logger = logger;

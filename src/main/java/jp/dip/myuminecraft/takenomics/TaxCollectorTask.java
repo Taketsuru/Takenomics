@@ -3,9 +3,9 @@ package jp.dip.myuminecraft.takenomics;
 import org.bukkit.scheduler.BukkitRunnable;
 
 public class TaxCollectorTask extends BukkitRunnable {
-    TaxCollector collector;
+    TaxOnSavingsCollector collector;
 
-    TaxCollectorTask(TaxCollector collector) {
+    TaxCollectorTask(TaxOnSavingsCollector collector) {
         this.collector = collector;
     }
 

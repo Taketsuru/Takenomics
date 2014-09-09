@@ -11,7 +11,7 @@ public class Takenomics extends JavaPlugin implements Listener {
 
     Locale       locale;
     Messages     messages;
-    TaxCollector collector;
+    TaxOnSavingsCollector collector;
     TaxLogger    logger;
 
     @Override
@@ -38,7 +38,7 @@ public class Takenomics extends JavaPlugin implements Listener {
 
             messages = new Messages(locale);
             logger = new TaxLogger(this);
-            collector = new TaxCollector(this, messages, logger);
+            collector = new TaxOnSavingsCollector(this, messages, logger);
         } catch (Throwable th) {
             getLogger().severe(th.toString());
             for (StackTraceElement e : th.getStackTrace()) {
