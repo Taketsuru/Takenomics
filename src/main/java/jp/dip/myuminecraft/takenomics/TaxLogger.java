@@ -17,20 +17,6 @@ import org.bukkit.scheduler.BukkitRunnable;
 
 public class TaxLogger {
 
-    class TaxRecord {
-        TaxRecord(long timestamp, String playerName, double balance, double rate) {
-            this.timestamp = timestamp;
-            this.playerName = playerName;
-            this.balance = balance;
-            this.rate = rate;
-        }
-
-        String playerName;
-        long   timestamp;
-        double balance;
-        double rate;
-    }
-
     enum PrinterState {
         normal,
         shutdownRequested,
@@ -93,13 +79,13 @@ public class TaxLogger {
         }
     }
     
-    public synchronized void put(long timestamp, String playerName, double balance, double rate) {
+    public synchronized void put(TaxRecord record) {
         if (output == null) {
             return;
         }
         
         boolean wakeup = queue.isEmpty();
-        queue.addLast(new TaxRecord(timestamp, playerName, balance, rate));
+        queue.addLast(record);
         if (wakeup) {
             notifyAll();
         }
@@ -113,11 +99,7 @@ public class TaxLogger {
             }
             
             try {
-                output.write(String.format("%s %s %f %f",
-                        timestampFormat.format(new Date(record.timestamp)),
-                        record.playerName,
-                        record.balance,
-                        record.rate));
+                output.write(record.toString());
                 output.newLine();
             } catch (IOException e) {
                 warnIOError(e);
@@ -168,7 +150,6 @@ public class TaxLogger {
 
     BufferedWriter   output;
     JavaPlugin       plugin;
-    PrinterState     printerState    = PrinterState.shutdown;
-    Deque<TaxRecord> queue           = new ArrayDeque<TaxRecord>();
-    SimpleDateFormat timestampFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    PrinterState     printerState = PrinterState.shutdown;
+    Deque<TaxRecord> queue        = new ArrayDeque<TaxRecord>();
 }

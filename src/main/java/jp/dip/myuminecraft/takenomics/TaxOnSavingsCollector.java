@@ -24,6 +24,21 @@ public class TaxOnSavingsCollector {
             this.rate = rate;
         }
     }
+    
+    class Record extends TaxRecord {       
+        Record(long timestamp, OfflinePlayer player, double balance, double rate) {
+             super(timestamp, player);
+             this.balance = balance;
+             this.rate = rate;
+        }
+        
+        protected String subclassToString() {
+            return String.format("savings %f %f", balance, rate);
+        }
+        
+        double balance;
+        double rate;
+    }
 
     static final long maxPeriodInSec = 60 * 60 * 24 * 365;
     static final long tickInterval   = 1000 / 20;
@@ -171,7 +186,7 @@ public class TaxOnSavingsCollector {
                                         (long) tax));
                     }
 
-                    logger.put(current, player.getName(), balance, rate);
+                    logger.put(new Record(current, player, balance, rate));
                 } else {
                     plugin.getServer().getLogger().info(response.toString());
                 }
