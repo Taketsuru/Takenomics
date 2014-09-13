@@ -26,17 +26,7 @@ import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 
 public class RedStoneTaxCollector implements Listener {
 
-    class TaxClass {
-        long   min;
-        double rate;
-
-        TaxClass(long min, double rate) {
-            this.min = min;
-            this.rate = rate;
-        }        
-    }
-    
-    class RedStoneTaxRecord extends TaxRecord {       
+     class RedStoneTaxRecord extends TaxRecord {       
         long   switching;
         double rate;
         double arrears;
@@ -73,7 +63,7 @@ public class RedStoneTaxCollector implements Listener {
     Messages                       messages;
     TaxLogger                      taxLogger;
     PeriodicCollector              collector;
-    List<TaxClass>                 classes           = new ArrayList<TaxClass>();
+    TaxTable                 table           = new TaxTable();
     Economy                        economy;
     WorldGuardPlugin               worldGuard;
     Map<OfflinePlayer, PlayerInfo> playerLookupTable = new HashMap<OfflinePlayer, PlayerInfo>();
@@ -116,7 +106,6 @@ public class RedStoneTaxCollector implements Listener {
     void loadConfig(String prefix) {
         String configEnable = prefix + ".enable";
         String configDebug = prefix + ".debug";
-        String configClasses = prefix + ".classes";
         String configTaxFree = prefix + ".taxFree";
 
         FileConfiguration config = plugin.getConfig();
@@ -140,50 +129,12 @@ public class RedStoneTaxCollector implements Listener {
             }
         }
 
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> classConfig =
-        (List<Map<String, Object>>) config.getList(configClasses);
-        if (classConfig == null) {
-            logger.warning("Can't find redstone tax class configurations.  Disable redstone tax.");
+        List<String> errors = table.loadConfig(prefix, config);
+        if (! errors.isEmpty()) {
+            for (String msg : errors) {
+                logger.warning("%s  Disable redstone tax.", msg);
+            }
             enable = false;
-        }
-
-        classes.clear();
-        int index = 0;
-        for (Map<String, Object> entry : classConfig) {
-            
-            Object min = entry.get("min");
-
-            if (min == null) {
-                logger.warning("%d-th redstone tax class doesn't have 'min' field.  Disable redstone tax.",
-                        index + 1);
-                enable = false;
-            } else if (! (min instanceof Number)) {
-                logger.warning("'min' field of %d-th redstone tax class has an invalid value.  Disable redstone tax.",
-                        index + 1);
-                enable = false;
-                min = null;
-            }
-
-            Object rate = entry.get("rate");
-
-            if (rate == null) {
-                logger.warning("%d-th redstone tax class doesn't have 'rate' field.  Disable redstone tax.",
-                        index + 1);
-                enable = false;
-            } else if (! (rate instanceof Number)) {
-                logger.warning("'rate' field of %d-th redstone tax class has an invalid value.  Disable redstone tax.",
-                        index + 1);
-                enable = false;
-                rate = null;
-            }
- 
-            if (min != null && rate != null) {
-                classes.add(new TaxClass(((Number)min).longValue(),
-                        ((Number)rate).doubleValue()));
-            }
-
-            ++index;
         }
 
         if (config.contains(configTaxFree)) {
@@ -202,7 +153,7 @@ public class RedStoneTaxCollector implements Listener {
         }
         
         if (! enable) {
-            classes.clear();
+            table.clear();
             taxFreeRegions.clear();
         }
     }
@@ -348,13 +299,7 @@ public class RedStoneTaxCollector implements Listener {
     boolean collectRedstoneTax(OfflinePlayer payer) {
         PlayerInfo info = playerLookupTable.get(payer);
         long charge = info.switching;
-        double rate = 0.0;
-        for (TaxClass c : classes) {
-            if (charge < c.min) {
-                break;
-            }
-            rate = c.rate;
-        }
+        double rate = table.getRate(charge);
 
         double arrears = info.arrears;
         double tax = charge * rate + arrears;
