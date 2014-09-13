@@ -4,12 +4,16 @@ import java.io.UnsupportedEncodingException;
 import java.util.Locale;
 import java.util.ResourceBundle;
 
+import org.bukkit.entity.Player;
+
 public class Messages {
-    
-    private ResourceBundle bundle;
+
+    ResourceBundle bundle;
+    Locale         locale;
 
     public Messages(Locale locale) {
             bundle = ResourceBundle.getBundle("messages", locale);
+            this.locale = locale;
     }
 
     public String getString(String key) {
@@ -18,6 +22,10 @@ public class Messages {
         } catch (UnsupportedEncodingException e) {
             throw new Error(e);
         }
+    }
+
+    public void chat(Player player, String formatKey, Object...args) {
+        player.sendMessage(String.format(locale, getString(formatKey), args));
     }
 
 }

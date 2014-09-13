@@ -1,11 +1,22 @@
+locale: ja-JP
+
 classes:
 - min: 10000
   rate: 0.001
 - min: 1000000
   rate: 0.03
 
+redstoneTax:
+  enable: true
+  interval: 900
+  classes:
+  - min: 3600
+    rate: 1.0
+  - min: 36000
+    rate: 100.0
+
 log:
-  enable: false
+  enable: true
   path: tax.log
 
 taxPeriod: 3600

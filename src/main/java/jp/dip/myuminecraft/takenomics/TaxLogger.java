@@ -6,9 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.text.SimpleDateFormat;
 import java.util.ArrayDeque;
-import java.util.Date;
 import java.util.Deque;
 
 import org.bukkit.configuration.file.FileConfiguration;
@@ -22,6 +20,11 @@ public class TaxLogger {
         shutdownRequested,
         shutdown
     }
+
+    BufferedWriter   output;
+    JavaPlugin       plugin;
+    PrinterState     printerState = PrinterState.shutdown;
+    Deque<TaxRecord> queue        = new ArrayDeque<TaxRecord>();
 
     TaxLogger(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -148,8 +151,4 @@ public class TaxLogger {
         return queue.removeFirst();
     }
 
-    BufferedWriter   output;
-    JavaPlugin       plugin;
-    PrinterState     printerState = PrinterState.shutdown;
-    Deque<TaxRecord> queue        = new ArrayDeque<TaxRecord>();
 }

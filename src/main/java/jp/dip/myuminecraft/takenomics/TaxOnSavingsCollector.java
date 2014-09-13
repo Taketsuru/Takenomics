@@ -42,7 +42,6 @@ public class TaxOnSavingsCollector {
 
     static final long maxPeriodInSec = 60 * 60 * 24 * 365;
     static final long tickInterval   = 1000 / 20;
-
     JavaPlugin        plugin;
     Messages          messages;
     TaxLogger         logger;
@@ -55,10 +54,13 @@ public class TaxOnSavingsCollector {
     boolean           isEnabled;
     BukkitRunnable    scheduledTask;
 
-    public TaxOnSavingsCollector(JavaPlugin plugin, Messages messages, TaxLogger logger) throws Exception {
+    public TaxOnSavingsCollector(JavaPlugin plugin, Messages messages,
+            TaxLogger logger, Economy economy)
+            throws Exception {
         this.plugin = plugin;
         this.messages = messages;
         this.logger = logger;
+        this.economy = economy;
 
         String pluginName = plugin.getDescription().getName();
 
@@ -115,17 +117,6 @@ public class TaxOnSavingsCollector {
 
         isEnabled = true;
 
-        RegisteredServiceProvider<Economy> economyProvider = plugin.getServer()
-                .getServicesManager()
-                .getRegistration(net.milkbowl.vault.economy.Economy.class);
-
-        if (economyProvider == null) {
-            String msg = String.format(
-                    "[%s] Disabled due to no Vault dependency found!", pluginName);
-            throw new Exception(msg);
-        }
-
-        economy = economyProvider.getProvider();
         currentPlayerIndex = -1;
 
         taxIntervalStart = System.currentTimeMillis() + taxPeriod;
@@ -139,7 +130,7 @@ public class TaxOnSavingsCollector {
         scheduledTask.cancel();
     }
 
-    public void collect() {
+    void collect() {
         long startTime = System.currentTimeMillis();
         long endTime = startTime + 2;
         while (isEnabled) {
