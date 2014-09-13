@@ -128,11 +128,12 @@ public class TaxOnRedStoneCollector implements Listener {
             enable = config.getBoolean(configEnable);
         }
 
+        debug = false;
         if (config.contains(configDebug)) {
-            if (! config.isBoolean(configEnable)) {
+            if (! config.isBoolean(configDebug)) {
                 logger.warning("'%s' is not a boolean.", configDebug);
             } else {
-                debug = config.getBoolean(configEnable);
+                debug = config.getBoolean(configDebug);
             }
         }
 
