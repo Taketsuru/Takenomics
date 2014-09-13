@@ -91,6 +91,10 @@ public class TaxTable {
         return rate;
     }
     
+    public double getTaxExemptionLimit() {
+        return  classes.isEmpty() ? 0.0 : classes.get(0).min;
+    }
+    
     public void clear() {
         classes.clear();
     }

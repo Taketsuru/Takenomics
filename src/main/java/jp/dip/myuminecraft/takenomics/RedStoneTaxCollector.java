@@ -1,6 +1,5 @@
 package jp.dip.myuminecraft.takenomics;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -63,7 +62,7 @@ public class RedStoneTaxCollector implements Listener {
     Messages                       messages;
     TaxLogger                      taxLogger;
     PeriodicCollector              collector;
-    TaxTable                 table           = new TaxTable();
+    TaxTable                       table             = new TaxTable();
     Economy                        economy;
     WorldGuardPlugin               worldGuard;
     Map<OfflinePlayer, PlayerInfo> playerLookupTable = new HashMap<OfflinePlayer, PlayerInfo>();
