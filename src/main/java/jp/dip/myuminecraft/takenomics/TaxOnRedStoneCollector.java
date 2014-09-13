@@ -6,7 +6,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.Vector;
 
 import net.milkbowl.vault.economy.Economy;
 
@@ -21,7 +20,6 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockPhysicsEvent;
 import org.bukkit.event.block.BlockRedstoneEvent;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import com.sk89q.worldguard.bukkit.WorldGuardPlugin;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
@@ -74,15 +72,12 @@ public class TaxOnRedStoneCollector implements Listener {
     Logger                         logger;
     Messages                       messages;
     TaxLogger                      taxLogger;
+    PeriodicCollector              collector;
     List<TaxClass>                 classes           = new ArrayList<TaxClass>();
     Economy                        economy;
     WorldGuardPlugin               worldGuard;
-    BukkitRunnable                 scheduledTask;
-    List<PlayerInfo>               playerList        = new ArrayList<PlayerInfo>();
     Map<OfflinePlayer, PlayerInfo> playerLookupTable = new HashMap<OfflinePlayer, PlayerInfo>();
     Set<String>                    taxFreeRegions    = new HashSet<String>();
-    long                           interval;
-    int                            nextVictim        = 0;
     boolean                        enable            = false;
     boolean                        debug             = false;
 
@@ -96,25 +91,33 @@ public class TaxOnRedStoneCollector implements Listener {
         this.economy = economy;
         this.worldGuard = worldGuard;
 
-        loadConfig();
-        
+        String prefix = "redstoneTax";
+        loadConfig(prefix);
+
+        try {
+            collector = new PeriodicCollector(plugin, prefix) {
+                protected boolean collect(OfflinePlayer payer) {
+                    return collectRedstoneTax(payer);
+                }
+            };
+        } catch (Exception e) {
+            logger.warning("%s  Disabled redstone tax.", e.getMessage());
+            enable = false;
+        }
+
         if (! enable) {
             return;
         }
 
-        scheduledTask = newCollectorTask();
-        scheduledTask.runTaskLater(plugin, interval * Constants.ticksPerSecond);
-        
+        collector.start();
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
     }
 
-    void loadConfig() {
-        String prefix = "redstoneTax.";
-        String configEnable = prefix + "enable";
-        String configDebug = prefix + "debug";
-        String configClasses = prefix + "classes";
-        String configInterval = prefix + "interval";
-        String configTaxFree = prefix + "taxFree";
+    void loadConfig(String prefix) {
+        String configEnable = prefix + ".enable";
+        String configDebug = prefix + ".debug";
+        String configClasses = prefix + ".classes";
+        String configTaxFree = prefix + ".taxFree";
 
         FileConfiguration config = plugin.getConfig();
         
@@ -134,26 +137,6 @@ public class TaxOnRedStoneCollector implements Listener {
                 logger.warning("'%s' is not a boolean.", configDebug);
             } else {
                 debug = config.getBoolean(configDebug);
-            }
-        }
-
-        if (! config.contains(configInterval)) {
-            logger.warning("Redstone tax interval is not configured.  Disable redstone tax.");
-            enable = false;
-        } else if (! config.isInt(configInterval)
-                && ! config.isLong(configInterval)) {
-            logger.warning("The specified redstone tax interval is not an integer.  Disable redstone tax.");
-            enable = false;
-        } else {
-            long minInterval = 10;
-            long maxInterval = 60 * 60 * 24 * 365;
-            long interval = config.getLong(configInterval);
-            if (interval < minInterval || maxInterval < interval) {
-                logger.warning("Redstone tax interval is out of legitimate range (min: %d, max: %d).  Disable redstone tax.",
-                        minInterval, maxInterval);
-                enable = false;
-            } else {
-                this.interval = interval;
             }
         }
 
@@ -257,7 +240,7 @@ public class TaxOnRedStoneCollector implements Listener {
             if (record == null) {
                 record = new PlayerInfo(owner);
                 playerLookupTable.put(owner,  record);
-                playerList.add(record);
+                collector.addPayer(owner);
             }
 
             if (record.arrears == 0.0) {
@@ -362,94 +345,65 @@ public class TaxOnRedStoneCollector implements Listener {
         }
     }
     
-    BukkitRunnable newCollectorTask() {
-        return new BukkitRunnable() {
-            public void run() {
-                collect();
+    boolean collectRedstoneTax(OfflinePlayer payer) {
+        PlayerInfo info = playerLookupTable.get(payer);
+        long charge = info.switching;
+        double rate = 0.0;
+        for (TaxClass c : classes) {
+            if (charge < c.min) {
+                break;
             }
-        };
-    }
-    
-    void collect() {
-        long startTime = System.nanoTime();
-        long maxCollectionTime = 2 * 1000 * 1000; // 2ms
-        for (; nextVictim < playerList.size(); ++nextVictim) {
+            rate = c.rate;
+        }
 
-            if (maxCollectionTime <= System.nanoTime() - startTime) {
-                scheduledTask = newCollectorTask();
-                scheduledTask.runTask(plugin);
-                return;
-            }
+        double arrears = info.arrears;
+        double tax = charge * rate + arrears;
 
-            PlayerInfo info = playerList.get(nextVictim);
-            long charge = info.switching;
-            double rate = 0.0;
-            for (TaxClass c : classes) {
-                if (charge < c.min) {
-                    break;
-                }
-                rate = c.rate;
-            }
-
-            double arrears = info.arrears;
-            double tax = charge * rate + arrears;
-
-            OfflinePlayer player = info.player;
-            Player onlinePlayer = player.isOnline() ? player.getPlayer() : null;
-            if (onlinePlayer != null && 0.0 < tax) {
-                messages.chat(onlinePlayer, "redstoneTaxNoticeHeader");
-                messages.chat(onlinePlayer, "redstoneTaxNoticeSwitching", charge);
-                messages.chat(onlinePlayer, "redstoneTaxNoticeRate", rate);
-                if (0.0 < arrears) {
-                    messages.chat(onlinePlayer, "redstoneTaxNoticeArrears", arrears);
-                }
-                messages.chat(onlinePlayer, "redstoneTaxNoticeTotal", tax);
-            }
-
-            String playerName = player.getName();
-            double balance = economy.getBalance(playerName);
-            double paid = 0.0;
-            if (balance <= 0.0) {
-                paid = 0.0;
-                arrears = tax;              
-            } else if (balance < tax) {
-                paid = balance;
-                arrears = tax - balance;
-            } else {
-                paid = tax;
-                arrears = 0.0;
-            }
-
-            if (0.0 < paid) {
-                economy.withdrawPlayer(playerName, paid);
-                if (onlinePlayer != null) {
-                    messages.chat(onlinePlayer, "redstoneTaxCollected", paid);
-                }
-            }
-
+        Player onlinePlayer = payer.isOnline() ? payer.getPlayer() : null;
+        if (onlinePlayer != null && 0.0 < tax) {
+            messages.chat(onlinePlayer, "redstoneTaxNoticeHeader");
+            messages.chat(onlinePlayer, "redstoneTaxNoticeSwitching", charge);
+            messages.chat(onlinePlayer, "redstoneTaxNoticeRate", rate);
             if (0.0 < arrears) {
-                info.switching = 0;
-                info.arrears = arrears;
-            } else {
-                playerLookupTable.remove(player);
-                int size = playerList.size();
-                if (nextVictim < size - 1) {
-                    playerList.set(nextVictim, playerList.get(size - 1));
-                }
-                playerList.remove(size - 1);
-                --nextVictim;
+                messages.chat(onlinePlayer, "redstoneTaxNoticeArrears", arrears);
             }
-            
-            if (0.0 < paid || 0.0 < arrears) {
-                taxLogger.put(new RedStoneTaxRecord(System.currentTimeMillis(),
-                        player, charge, rate, arrears, paid));
+            messages.chat(onlinePlayer, "redstoneTaxNoticeTotal", tax);
+        }
+
+        String playerName = payer.getName();
+        double balance = economy.getBalance(playerName);
+        double paid = 0.0;
+        if (balance <= 0.0) {
+            paid = 0.0;
+            arrears = tax;              
+        } else if (balance < tax) {
+            paid = balance;
+            arrears = tax - balance;
+        } else {
+            paid = tax;
+            arrears = 0.0;
+        }
+
+        if (0.0 < paid) {
+            economy.withdrawPlayer(playerName, paid);
+            if (onlinePlayer != null) {
+                messages.chat(onlinePlayer, "redstoneTaxCollected", paid);
             }
         }
-        
-        nextVictim = 0;
 
-        scheduledTask = newCollectorTask();
-        scheduledTask.runTaskLater(plugin, interval * Constants.ticksPerSecond);
+        if (0.0 < paid || 0.0 < arrears) {
+            taxLogger.put(new RedStoneTaxRecord(System.currentTimeMillis(),
+                    payer, charge, rate, arrears, paid));
+        }
+        
+        if (0.0 < arrears) {
+            info.switching = 0;
+            info.arrears = arrears;
+            return false;
+        }
+
+        playerLookupTable.remove(payer);
+
+        return true;
     }
- }
- 
+}
