@@ -24,7 +24,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import com.sk89q.worldguard.bukkit.WorldGuardPlugin;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 
-public class TaxOnRedStoneCollector implements Listener {
+public class RedStoneTaxCollector implements Listener {
 
     class TaxClass {
         long   min;
@@ -81,7 +81,7 @@ public class TaxOnRedStoneCollector implements Listener {
     boolean                        enable            = false;
     boolean                        debug             = false;
 
-    public TaxOnRedStoneCollector(JavaPlugin plugin, Logger logger, Messages messages,
+    public RedStoneTaxCollector(JavaPlugin plugin, Logger logger, Messages messages,
             TaxLogger taxLogger, Economy economy, WorldGuardPlugin worldGuard)
             throws Exception {
         this.plugin = plugin;

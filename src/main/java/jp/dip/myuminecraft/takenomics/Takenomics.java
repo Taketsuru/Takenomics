@@ -20,7 +20,7 @@ public class Takenomics extends JavaPlugin implements Listener {
     Economy                economy;
     TaxLogger              taxLogger;
     TaxOnSavingsCollector  taxOnSavingsCollector;
-    TaxOnRedStoneCollector taxOnRedStoneCollector;
+    RedStoneTaxCollector taxOnRedStoneCollector;
     WorldGuardPlugin       worldGuard;
 
     @Override
@@ -35,7 +35,7 @@ public class Takenomics extends JavaPlugin implements Listener {
             worldGuard = getWorldGuard();
 
             taxOnSavingsCollector = new TaxOnSavingsCollector(this, logger, messages, taxLogger, economy);
-            taxOnRedStoneCollector = new TaxOnRedStoneCollector(this, logger, messages, taxLogger, economy, worldGuard);
+            taxOnRedStoneCollector = new RedStoneTaxCollector(this, logger, messages, taxLogger, economy, worldGuard);
 
         } catch (Throwable th) {
             getLogger().severe(th.toString());
