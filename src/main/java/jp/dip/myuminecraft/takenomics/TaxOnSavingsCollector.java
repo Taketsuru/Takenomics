@@ -1,7 +1,5 @@
 package jp.dip.myuminecraft.takenomics;
 
-import java.util.List;
-
 import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.economy.EconomyResponse;
 
@@ -13,7 +11,7 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
-public class TaxOnSavingsCollector implements Listener {
+public class TaxOnSavingsCollector extends PeriodicTaxCollector implements Listener {
 
     class Record extends TaxRecord {       
         Record(long timestamp, OfflinePlayer player, double balance, double rate) {
@@ -30,38 +28,22 @@ public class TaxOnSavingsCollector implements Listener {
         double rate;
     }
 
-    JavaPlugin         plugin;
-    Logger             logger;
-    Messages           messages;
-    TaxLogger          taxLogger;
-    Economy            economy;
-    PeriodicCollector  collector;
-    TaxTable           table = new TaxTable();
-    boolean            enable;
+    Messages  messages;
+    TaxLogger taxLogger;
+    Economy   economy;
+    TaxTable  table = new TaxTable();
 
     public TaxOnSavingsCollector(final JavaPlugin plugin, Logger logger, Messages messages,
-            TaxLogger taxLogger, final Economy economy)
-            throws Exception {
-        this.plugin = plugin;
-        this.logger = logger;
+            TaxLogger taxLogger, final Economy economy) {
+        super(plugin, logger);
+
         this.messages = messages;
         this.taxLogger = taxLogger;
         this.economy = economy;
-
-        String configPrefix = "taxOnSavings";
-        
-        loadConfig(configPrefix);
-
-        try {
-            collector = new PeriodicCollector(plugin, configPrefix) {
-                protected boolean collect(OfflinePlayer payer) {
-                    return collectTaxOnSavings(payer);
-                }
-            };
-        } catch (Exception e) {
-            logger.warning("%s  Disable tax on savings.", e.getMessage());
-            enable = false;
-        }
+    }
+    
+    public void enable() {
+        super.loadConfig(logger, plugin.getConfig(), "taxOnSavings", "tax on savings");
 
         if (! enable) {
             return;
@@ -72,31 +54,26 @@ public class TaxOnSavingsCollector implements Listener {
                 for (OfflinePlayer player : plugin.getServer().getOfflinePlayers()) {
                     if (player.isOnline()
                             || (table.getTaxExemptionLimit() <= economy.getBalance(player.getName()))) {
-                        collector.addPayer(player);
+                        addPayer(player);
                     }
                 }                
             }
         }.runTask(plugin);
 
-        collector.start();
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
     }
 
-    void loadConfig(String configPrefix) throws Exception {
-        FileConfiguration config = plugin.getConfig();
-
+    protected boolean loadConfig(Logger logger, FileConfiguration config, String configPrefix, boolean error) {
+        boolean result = super.loadConfig(logger,  config, configPrefix, error);
+        
         if (! table.loadConfig(logger, config, configPrefix)) {
-            logger.warning("Disable tax on savings.");
-            enable = false;
+            result = true;
         }
+        
+        return result;
     }
 
-    public void disable() {
-        enable = false;
-        collector.stop();
-    }
-
-    boolean collectTaxOnSavings(OfflinePlayer payer) {
+    protected boolean collect(OfflinePlayer payer) {
         double balance = economy.getBalance(payer.getName());
         double rate = table.getRate(balance);
 
@@ -129,7 +106,7 @@ public class TaxOnSavingsCollector implements Listener {
     
     @EventHandler
     void onPlayerJoin(PlayerJoinEvent event) {
-        collector.addPayer(plugin.getServer().getOfflinePlayer(event.getPlayer().getName()));
+        addPayer(plugin.getServer().getOfflinePlayer(event.getPlayer().getName()));
     }
 
 }

@@ -5,55 +5,58 @@ import java.util.List;
 
 import org.bukkit.OfflinePlayer;
 import org.bukkit.configuration.file.FileConfiguration;
-
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
-public abstract class PeriodicCollector {
+public abstract class PeriodicTaxCollector extends TaxCollector {
 
-    JavaPlugin          plugin;
     BukkitRunnable      runnable;
     List<OfflinePlayer> payers = new ArrayList<OfflinePlayer>();
     long                interval;
     int                 nextPayer;
 
-    public PeriodicCollector(JavaPlugin plugin, String configPrefix) throws Exception {
-        this.plugin = plugin;
-        loadConfig(configPrefix);
+    public PeriodicTaxCollector(JavaPlugin plugin, Logger logger) {
+        super(plugin, logger);
     }
 
-    void loadConfig(String configPrefix) throws Exception {
-        String configInterval = configPrefix + ".interval";
+    protected void loadConfig(Logger logger, FileConfiguration config, String configPrefix, String taxName) {
+        super.loadConfig(logger, config, configPrefix, taxName);
 
-        FileConfiguration config = plugin.getConfig();
-
-        if (! config.contains(configInterval)) {
-            throw new Exception(String.format("'%s' is not configured.", configInterval));
-        }
-
-        if (! config.isInt(configInterval)
-                && ! config.isLong(configInterval)) {
-            throw new Exception(String.format("'%s' is not an integer.", configInterval));
-        }
-
-        long minInterval = 10;
-        long maxInterval = 60 * 60 * 24 * 365;
-        long interval = config.getLong(configInterval);
-        if (interval < minInterval || maxInterval < interval) {
-            throw new Exception(String.format("'%s' is out of legitimate range (min: %d, max: %d).",
-                    minInterval, maxInterval));
-        }
-
-        this.interval = interval;
-    }
-
-    public void start() {
-        if (runnable == null) {
+        if (enable) {
             scheduleNextInterval();
+        }       
+    }
+    
+    protected boolean
+    loadConfig(Logger logger, FileConfiguration config,
+            String configPrefix, boolean error) {
+        boolean result = super.loadConfig(logger, config, configPrefix, error);
+
+        String configInterval = configPrefix + ".interval";
+        if (! config.contains(configInterval)) {
+            logger.warning("'%s' is not configured.", configInterval);
+            result = true;
+        } else if (! config.isInt(configInterval)
+                && ! config.isLong(configInterval)) {
+            logger.warning("'%s' is not an integer.", configInterval);
+            result = true;
+        } else {
+            long minInterval = 10;
+            long maxInterval = 60 * 60 * 24 * 365;
+            long interval = config.getLong(configInterval);
+            if (interval < minInterval || maxInterval < interval) {
+                logger.warning("'%s' is out of legitimate range.",
+                        configInterval);
+                result = true;
+            } else {
+                this.interval = interval;
+            }
         }
+        
+        return result;
     }
 
-    public void stop() {
+    public void disable() {
         if (runnable != null) {
             runnable.cancel();
             runnable = null;
@@ -96,21 +99,14 @@ public abstract class PeriodicCollector {
             }
         }
 
-        nextPayer = 0;
-        onEndOfInterval();
-
         scheduleNextInterval();
     }
 
     protected abstract boolean collect(OfflinePlayer payer);
     
-    protected void onEndOfInterval() {
-    }
-
     public void addPayer(OfflinePlayer payer) {
         if (! payers.contains(payer)) {
             payers.add(payer);
         }
     }
 }
-

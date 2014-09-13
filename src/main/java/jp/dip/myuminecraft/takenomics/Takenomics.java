@@ -15,13 +15,13 @@ import com.sk89q.worldguard.bukkit.WorldGuardPlugin;
 
 public class Takenomics extends JavaPlugin implements Listener {
 
-    Logger                 logger;
-    Messages               messages;
-    Economy                economy;
-    TaxLogger              taxLogger;
-    TaxOnSavingsCollector  taxOnSavingsCollector;
-    RedStoneTaxCollector taxOnRedStoneCollector;
-    WorldGuardPlugin       worldGuard;
+    Logger                logger;
+    Messages              messages;
+    Economy               economy;
+    TaxLogger             taxLogger;
+    TaxOnSavingsCollector taxOnSavingsCollector;
+    RedstoneTaxCollector  redstoneTaxCollector;
+    WorldGuardPlugin      worldGuard;
 
     @Override
     public void onEnable() {
@@ -35,8 +35,10 @@ public class Takenomics extends JavaPlugin implements Listener {
             worldGuard = getWorldGuard();
 
             taxOnSavingsCollector = new TaxOnSavingsCollector(this, logger, messages, taxLogger, economy);
-            taxOnRedStoneCollector = new RedStoneTaxCollector(this, logger, messages, taxLogger, economy, worldGuard);
+            redstoneTaxCollector = new RedstoneTaxCollector(this, logger, messages, taxLogger, economy, worldGuard);
 
+            taxOnSavingsCollector.enable();
+            redstoneTaxCollector.enable();
         } catch (Throwable th) {
             getLogger().severe(th.toString());
             for (StackTraceElement e : th.getStackTrace()) {
@@ -52,12 +54,12 @@ public class Takenomics extends JavaPlugin implements Listener {
         String languageTag = config.getString("locale");
         Locale result = null;
         if (languageTag == null) {
-            getLogger().warning(String.format("[%s] Can't find locale configurations.", getName()));
+            logger.warning("Can't find locale configurations.");
         } else {            
             try {
                 result = new Locale.Builder().setLanguageTag(languageTag).build();
             } catch (IllformedLocaleException e) {
-                getLogger().warning(String.format("[%s] Illegal locale '%s' is specified.", getName(), languageTag));
+                logger.warning("Illegal locale '%s' is specified.", getName(), languageTag);
            }
         }
         if (result == null) {
@@ -73,20 +75,18 @@ public class Takenomics extends JavaPlugin implements Listener {
                 .getRegistration(net.milkbowl.vault.economy.Economy.class);
 
         if (economyProvider == null) {
-            String msg = String.format(
-                    "[%s] No Vault found!  Disabled %s.", getName(), getName());
+            String msg = String.format("No Vault found!  Disabled %s.", getName());
             throw new Exception(msg);
         }
 
         return economyProvider.getProvider();
     }
-    
+
     WorldGuardPlugin getWorldGuard() throws Exception {
         Plugin result = getServer().getPluginManager().getPlugin("WorldGuard");
 
         if (result == null || ! (result instanceof WorldGuardPlugin)) {
-            String msg = String.format(
-                    "[%s] No WorldGuard found!  Disabled %s.", getName(), getName());
+            String msg = String.format("No WorldGuard found!  Disabled %s.", getName());
             throw new Exception(msg);
         }
      
@@ -100,6 +100,10 @@ public class Takenomics extends JavaPlugin implements Listener {
         if (taxOnSavingsCollector != null) {
             taxOnSavingsCollector.disable();
             taxOnSavingsCollector = null;
+        }
+        if (redstoneTaxCollector != null) {
+            redstoneTaxCollector.disable();
+            redstoneTaxCollector = null;
         }
         if (taxLogger != null) {
             taxLogger.disable();
