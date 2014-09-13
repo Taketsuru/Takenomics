@@ -245,7 +245,7 @@ public class TaxOnRedStoneCollector implements Listener {
             return;
         }
         
-        if (gboResult.taxFree) {
+        if (gboResult.taxFree && debug) {
             logger.info("redstone: tax free");
             return;
         }
