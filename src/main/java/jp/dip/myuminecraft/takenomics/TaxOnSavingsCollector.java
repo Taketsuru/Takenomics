@@ -47,9 +47,8 @@ public class TaxOnSavingsCollector {
     TaxLogger         logger;
     Vector<TaxClass>  classes;
     Economy           economy;
-    int               currentPlayerIndex;
+    int               nextPayer;
     OfflinePlayer[]   playerList;
-    long              taxIntervalStart;
     long              taxPeriod;
     boolean           isEnabled;
     BukkitRunnable    scheduledTask;
@@ -107,22 +106,16 @@ public class TaxOnSavingsCollector {
             ++index;
         }
 
-        long taxPeriodInSec = config.getLong("taxPeriod");
-        if (taxPeriodInSec <= 0 || maxPeriodInSec < taxPeriodInSec) {
+        taxPeriod = config.getLong("taxPeriod");
+        if (taxPeriod <= 0 || maxPeriodInSec < taxPeriod) {
             String msg = String.format("[%s] taxPeriod is too large. (max: %d)",
                     pluginName, maxPeriodInSec);
             throw new Exception(msg);
         }
-        taxPeriod = taxPeriodInSec * 1000;
 
         isEnabled = true;
 
-        currentPlayerIndex = -1;
-
-        taxIntervalStart = System.currentTimeMillis() + taxPeriod;
-
-        scheduledTask = newCollector();
-        scheduledTask.runTaskLater(plugin, taxPeriod / tickInterval);
+        scheduleNextCollection();
     }
 
     public void disable() {
@@ -133,20 +126,16 @@ public class TaxOnSavingsCollector {
     void collect() {
         long startTime = System.currentTimeMillis();
         long endTime = startTime + 2;
-        while (isEnabled) {
+        for (; nextPayer < playerList.length; ++nextPayer) {
             
             long current = System.currentTimeMillis();
             if (endTime <= current) {
-                break;
+                scheduledTask = newCollector();
+                scheduledTask.runTask(plugin);
+                return;
             }
 
-            if (currentPlayerIndex < 0) {
-                playerList = plugin.getServer().getOfflinePlayers();
-                currentPlayerIndex = 0;
-                continue;
-            }
-
-            OfflinePlayer player = playerList[currentPlayerIndex];
+            OfflinePlayer player = playerList[nextPayer];
             double balance = economy.getBalance(player.getName());
 
             double rate = 0.0;
@@ -182,33 +171,17 @@ public class TaxOnSavingsCollector {
                     plugin.getServer().getLogger().info(response.toString());
                 }
             }
-
-            if (playerList.length <= ++currentPlayerIndex) {
-                playerList = null;
-                currentPlayerIndex = -1;
-                int count = 0;
-                while (taxIntervalStart <= System.currentTimeMillis()) {
-                    taxIntervalStart += taxPeriod;
-                    ++count;
-                }
-                if (1 < count) {
-                    plugin.getServer().getLogger()
-                        .warning(String.format("[%s] Server overloaded or tickPeriod is too small.",
-                                 plugin.getDescription().getName()));
-                }
-                scheduledTask = newCollector();
-                scheduledTask.runTaskLater(plugin,
-                        (taxIntervalStart - System.currentTimeMillis())
-                                / tickInterval);
-
-                return;
-            }
         }
 
-        if (isEnabled) {
-            scheduledTask = newCollector();
-            scheduledTask.runTask(plugin);
-        }
+        scheduleNextCollection();
+    }
+    
+    void scheduleNextCollection() {
+        playerList = plugin.getServer().getOfflinePlayers();
+        nextPayer = 0;
+
+        scheduledTask = newCollector();
+        scheduledTask.runTaskLater(plugin, taxPeriod * Constants.ticksPerSecond);        
     }
 
     BukkitRunnable newCollector() {
