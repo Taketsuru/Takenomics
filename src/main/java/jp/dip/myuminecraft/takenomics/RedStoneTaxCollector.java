@@ -128,11 +128,7 @@ public class RedStoneTaxCollector implements Listener {
             }
         }
 
-        List<String> errors = table.loadConfig(prefix, config);
-        if (! errors.isEmpty()) {
-            for (String msg : errors) {
-                logger.warning("%s  Disable redstone tax.", msg);
-            }
+        if (! table.loadConfig(logger, config, prefix)) {
             enable = false;
         }
 
@@ -152,6 +148,7 @@ public class RedStoneTaxCollector implements Listener {
         }
         
         if (! enable) {
+            logger.warning("Disable redstone tax.");
             table.clear();
             taxFreeRegions.clear();
         }

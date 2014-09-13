@@ -85,12 +85,8 @@ public class TaxOnSavingsCollector implements Listener {
     void loadConfig(String configPrefix) throws Exception {
         FileConfiguration config = plugin.getConfig();
 
-        enable = true;
-        List<String> errors = table.loadConfig(configPrefix,  config);
-        if (! errors.isEmpty()) {
-            for (String msg : errors) {
-                logger.warning("%s  Disable tax on savings.", msg);
-            }
+        if (! table.loadConfig(logger, config, configPrefix)) {
+            logger.warning("Disable tax on savings.");
             enable = false;
         }
     }

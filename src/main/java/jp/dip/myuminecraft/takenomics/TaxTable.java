@@ -23,10 +23,10 @@ public class TaxTable {
     public TaxTable() {
     }
 
-    public ArrayList<String> loadConfig(String configPrefix, FileConfiguration config) {
+    public boolean loadConfig(Logger logger, FileConfiguration config, String configPrefix) {
         classes.clear();
         
-        ArrayList<String> result = new ArrayList<String>();
+        boolean result = true;
 
         String configClasses = configPrefix + ".table";
 
@@ -34,36 +34,37 @@ public class TaxTable {
         List<Map<String, Object>> classConfig =
         (List<Map<String, Object>>) config.getList(configClasses);
         if (classConfig == null) {
-            result.add(String.format("No '%s' configurations.", configClasses));
-        }
-
-        if (result.isEmpty()) {
+            logger.warning("No '%s' configurations.", configClasses);
+            result = false;
+        } else {
             int index = 0;
             for (Map<String, Object> entry : classConfig) {
 
                 Object min = entry.get("min");
 
                 if (min == null) {
-                    result.add(String.format("%d-th row of '%s' doesn't have 'min' field.",
-                            index + 1, configClasses));
+                    logger.warning("%d-th row of '%s' doesn't have 'min' field.",
+                            index + 1, configClasses);
+                    result = false;
                 } else if (! (min instanceof Number)) {
-                    result.add(String.format("'min' field of %d-th row of '%s' has an invalid value.",
-                            index + 1, configClasses));
-                    min = null;
+                    logger.warning("'min' field of %d-th row of '%s' has an invalid value.",
+                            index + 1, configClasses);
+                    result = false;
                 }
 
                 Object rate = entry.get("rate");
 
                 if (rate == null) {
-                    result.add(String.format("%d-th row of '%s' doesn't have 'rate' field.",
-                            index + 1, configClasses));
+                    logger.warning("%d-th row of '%s' doesn't have 'rate' field.",
+                            index + 1, configClasses);
+                    result = false;
                 } else if (! (rate instanceof Number)) {
-                    result.add(String.format("'rate' field of %d-th row of '%s' has an invalid value.",
-                            index + 1, configClasses));
-                    rate = null;
+                    logger.warning("'rate' field of %d-th row of '%s' has an invalid value.",
+                            index + 1, configClasses);
+                    result = false;
                 }
 
-                if (min != null && rate != null) {
+                if (result) {
                     classes.add(new TaxClass(((Number)min).doubleValue(),
                             ((Number)rate).doubleValue()));
                 }
@@ -72,7 +73,7 @@ public class TaxTable {
             }
         }
 
-        if (! result.isEmpty()) {
+        if (! result) {
             classes.clear();
         }
         
