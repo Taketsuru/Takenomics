@@ -34,7 +34,7 @@ public class Takenomics extends JavaPlugin implements Listener {
             economy = getEconomyProvider();
             worldGuard = getWorldGuard();
 
-            taxOnSavingsCollector = new TaxOnSavingsCollector(this, messages, taxLogger, economy);
+            taxOnSavingsCollector = new TaxOnSavingsCollector(this, logger, messages, taxLogger, economy);
             taxOnRedStoneCollector = new TaxOnRedStoneCollector(this, logger, messages, taxLogger, economy, worldGuard);
 
         } catch (Throwable th) {

@@ -108,7 +108,9 @@ public abstract class PeriodicCollector {
     }
 
     public void addPayer(OfflinePlayer payer) {
-        payers.add(payer);
+        if (! payers.contains(payer)) {
+            payers.add(payer);
+        }
     }
 }
 

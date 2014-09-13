@@ -1,19 +1,21 @@
 package jp.dip.myuminecraft.takenomics;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Vector;
 
 import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.economy.EconomyResponse;
 
 import org.bukkit.OfflinePlayer;
 import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.plugin.RegisteredServiceProvider;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
-public class TaxOnSavingsCollector {
+public class TaxOnSavingsCollector implements Listener {
 
     class TaxClass {
         double min;
@@ -40,41 +42,75 @@ public class TaxOnSavingsCollector {
         double rate;
     }
 
-    static final long maxPeriodInSec = 60 * 60 * 24 * 365;
-    static final long tickInterval   = 1000 / 20;
-    JavaPlugin        plugin;
-    Messages          messages;
-    TaxLogger         logger;
-    Vector<TaxClass>  classes;
-    Economy           economy;
-    int               nextPayer;
-    OfflinePlayer[]   playerList;
-    long              taxPeriod;
-    boolean           isEnabled;
-    BukkitRunnable    scheduledTask;
+    JavaPlugin         plugin;
+    Logger             logger;
+    Messages           messages;
+    TaxLogger          taxLogger;
+    Economy            economy;
+    PeriodicCollector  collector;
+    List<TaxClass>     classes = new ArrayList<TaxClass>();
+    boolean            enable;
 
-    public TaxOnSavingsCollector(JavaPlugin plugin, Messages messages,
-            TaxLogger logger, Economy economy)
+    public TaxOnSavingsCollector(final JavaPlugin plugin, Logger logger, Messages messages,
+            TaxLogger taxLogger, final Economy economy)
             throws Exception {
         this.plugin = plugin;
-        this.messages = messages;
         this.logger = logger;
+        this.messages = messages;
+        this.taxLogger = taxLogger;
         this.economy = economy;
 
-        String pluginName = plugin.getDescription().getName();
+        String configPrefix = "taxOnSavings";
+        
+        loadConfig(configPrefix);
+
+        try {
+            collector = new PeriodicCollector(plugin, configPrefix) {
+                protected boolean collect(OfflinePlayer payer) {
+                    return collectTaxOnSavings(payer);
+                }
+            };
+        } catch (Exception e) {
+            logger.warning("%s  Disable tax on savings.", e.getMessage());
+            enable = false;
+        }
+
+        if (! enable) {
+            return;
+        }
+
+        new BukkitRunnable() {
+            public void run() {
+                for (OfflinePlayer player : plugin.getServer().getOfflinePlayers()) {
+                    if (player.isOnline()
+                            || (0 < classes.size()
+                                    && classes.get(0).min <= economy.getBalance(player.getName()))) {
+                        collector.addPayer(player);
+                    }
+                }                
+            }
+        }.runTask(plugin);
+
+        collector.start();
+        plugin.getServer().getPluginManager().registerEvents(this, plugin);
+    }
+
+    void loadConfig(String configPrefix) throws Exception {
 
         FileConfiguration config = plugin.getConfig();
 
+        enable = true;
+
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> classConfig = (List<Map<String, Object>>) config
-                .getList("classes");
+                .getList(configPrefix + ".classes");
         if (classConfig == null) {
             String msg = String.format(
-                    "[%s] - Can't find class configurations.", pluginName);
+                    "Can't find class configurations.");
             throw new Exception(msg);
         }
 
-        classes = new Vector<TaxClass>();
+        classes.clear();
         int index = 0;
         for (Map<String, Object> entry : classConfig) {
             String[] doubleFields = { "min", "rate" };
@@ -86,15 +122,15 @@ public class TaxOnSavingsCollector {
 
                 if (value == null) {
                     String msg = String
-                            .format("[%s] - %d-th class doesn't have '%s' field.",
-                                    pluginName, index + 1, field);
+                            .format("%d-th class doesn't have '%s' field.",
+                                    index + 1, field);
                     throw new Exception(msg);
                 }
 
                 if (! (value instanceof Number)) {
                     String msg = String
-                            .format("[%s] '%s' field of %d-th class has an invalid value.",
-                                    pluginName, field, index + 1);
+                            .format("'%s' field of %d-th class has an invalid value.",
+                                    field, index + 1);
                     throw new Exception(msg);
                 }
 
@@ -105,90 +141,54 @@ public class TaxOnSavingsCollector {
             classes.add(new TaxClass(values[0], values[1]));
             ++index;
         }
-
-        taxPeriod = config.getLong("taxPeriod");
-        if (taxPeriod <= 0 || maxPeriodInSec < taxPeriod) {
-            String msg = String.format("[%s] taxPeriod is too large. (max: %d)",
-                    pluginName, maxPeriodInSec);
-            throw new Exception(msg);
-        }
-
-        isEnabled = true;
-
-        scheduleNextCollection();
     }
 
     public void disable() {
-        this.isEnabled = false;
-        scheduledTask.cancel();
+        enable = false;
+        collector.stop();
     }
 
-    void collect() {
-        long startTime = System.currentTimeMillis();
-        long endTime = startTime + 2;
-        for (; nextPayer < playerList.length; ++nextPayer) {
-            
-            long current = System.currentTimeMillis();
-            if (endTime <= current) {
-                scheduledTask = newCollector();
-                scheduledTask.runTask(plugin);
-                return;
+    boolean collectTaxOnSavings(OfflinePlayer payer) {
+        double balance = economy.getBalance(payer.getName());
+
+        double rate = 0.0;
+        for (TaxClass tc : classes) {
+            if (balance < tc.min) {
+                break;
             }
+            rate = tc.rate;
+        }
 
-            OfflinePlayer player = playerList[nextPayer];
-            double balance = economy.getBalance(player.getName());
+        double tax;
+        if (balance < 0) {
+            tax = 0;
+        } else {
+            tax = balance * rate;
+            if (balance < tax) {
+                tax = balance;
+            }
+        }
+        tax = Math.floor(tax);
 
-            double rate = 0.0;
-            for (TaxClass tc : classes) {
-                if (balance < tc.min) {
-                    break;
+        if (0 < tax) {
+            EconomyResponse response = economy.withdrawPlayer(payer.getName(), tax);
+            if (response.transactionSuccess()) {
+                if (payer.isOnline()) {
+                    messages.chat(payer.getPlayer(), "taxCollected", (long) tax);
                 }
-                rate = tc.rate;
-            }
 
-            double tax;
-            if (balance < 0) {
-                tax = 0;
+                taxLogger.put(new Record(System.currentTimeMillis(), payer, balance, rate));
             } else {
-                tax = balance * rate;
-                if (balance < tax) {
-                    tax = balance;
-                }
-            }
-            tax = Math.floor(tax);
-
-            if (0 < tax) {
-                EconomyResponse response = economy.withdrawPlayer(player.getName(), tax);
-                if (response.transactionSuccess()) {
-                    if (player.isOnline()) {
-                        player.getPlayer().sendMessage(
-                                String.format(messages.getString("taxCollected"),
-                                        (long) tax));
-                    }
-
-                    logger.put(new Record(current, player, balance, rate));
-                } else {
-                    plugin.getServer().getLogger().info(response.toString());
-                }
+                logger.info(response.toString());
             }
         }
 
-        scheduleNextCollection();
+        return ! payer.isOnline() && rate == 0.0;
     }
     
-    void scheduleNextCollection() {
-        playerList = plugin.getServer().getOfflinePlayers();
-        nextPayer = 0;
-
-        scheduledTask = newCollector();
-        scheduledTask.runTaskLater(plugin, taxPeriod * Constants.ticksPerSecond);        
+    @EventHandler
+    void onPlayerJoin(PlayerJoinEvent event) {
+        collector.addPayer(plugin.getServer().getOfflinePlayer(event.getPlayer().getName()));
     }
 
-    BukkitRunnable newCollector() {
-        return new BukkitRunnable() {
-            public void run() {
-                collect();
-            }
-        };
-    }
 }

@@ -1,4 +1,4 @@
 name: Takenomics
 main: jp.dip.myuminecraft.takenomics.Takenomics
 version: 0.0.1-SNAPSHOT
-depends: Vault
+depend: [Vault, WorldGuard]
