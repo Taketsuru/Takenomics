@@ -89,7 +89,7 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
             result = true;
         }
 
-        String configTaxFree = configPrefix + ".taxFree";
+        String configTaxFree = configPrefix + ".taxExempt";
         taxFreeRegions.clear();
         if (config.contains(configTaxFree)) {
             if (! config.isList(configTaxFree)) {
@@ -129,8 +129,10 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
             return;
         }
         
-        if (gboResult.taxFree && debug) {
-            logger.info("redstone: tax free");
+        if (gboResult.taxFree) {
+            if (debug) {
+                logger.info("redstone: tax free");
+            }
             return;
         }
 
