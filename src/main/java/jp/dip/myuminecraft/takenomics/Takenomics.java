@@ -5,6 +5,9 @@ import java.util.Locale;
 
 import net.milkbowl.vault.economy.Economy;
 
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.Plugin;
@@ -17,11 +20,13 @@ public class Takenomics extends JavaPlugin implements Listener {
 
     Logger                logger;
     Messages              messages;
-    Economy               economy;
+    CommandDispatcher     commandDispatcher;
+    Database              database;
     TaxLogger             taxLogger;
+    Economy               economy;
+    WorldGuardPlugin      worldGuard;
     TaxOnSavingsCollector taxOnSavingsCollector;
     RedstoneTaxCollector  redstoneTaxCollector;
-    WorldGuardPlugin      worldGuard;
 
     @Override
     public void onEnable() {
@@ -30,14 +35,26 @@ public class Takenomics extends JavaPlugin implements Listener {
             
             logger = new Logger(getLogger());
             messages = new Messages(getLocale());
+            
+            commandDispatcher = new CommandDispatcher(messages, "takenomics.command.");
+            getCommand("takenomics").setExecutor(commandDispatcher);
+
+            registerReloadCommand();
+
+            database = new Database(this, logger);
+            if (! database.enable()) {
+                logger.warning("Disable database access.");
+                database = null;
+            }
+
             taxLogger = new TaxLogger(this);
             economy = getEconomyProvider();
             worldGuard = getWorldGuard();
 
             taxOnSavingsCollector = new TaxOnSavingsCollector(this, logger, messages, taxLogger, economy);
-            redstoneTaxCollector = new RedstoneTaxCollector(this, logger, messages, taxLogger, economy, worldGuard);
-
             taxOnSavingsCollector.enable();
+
+            redstoneTaxCollector = new RedstoneTaxCollector(this, logger, messages, taxLogger, economy, worldGuard);
             redstoneTaxCollector.enable();
         } catch (Throwable th) {
             getLogger().severe(th.toString());
@@ -46,6 +63,20 @@ public class Takenomics extends JavaPlugin implements Listener {
             }
             getServer().getPluginManager().disablePlugin(this);
         }
+    }
+    
+    void registerReloadCommand() {
+        commandDispatcher.addCommand("reload", new CommandExecutor() {
+            public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
+                if (args.length != 1) {
+                    return false;
+                }
+                reload();
+                logger.info("Finished reloading %s", getName());
+
+                return true;
+            }
+        }); 
     }
 
     Locale getLocale() {
@@ -96,19 +127,36 @@ public class Takenomics extends JavaPlugin implements Listener {
     
     @Override
     public void onDisable() {
-        messages = null;
-        if (taxOnSavingsCollector != null) {
-            taxOnSavingsCollector.disable();
-            taxOnSavingsCollector = null;
-        }
         if (redstoneTaxCollector != null) {
             redstoneTaxCollector.disable();
             redstoneTaxCollector = null;
         }
+
+        if (taxOnSavingsCollector != null) {
+            taxOnSavingsCollector.disable();
+            taxOnSavingsCollector = null;
+        }
+
+        worldGuard = null;
+        economy = null;
+
         if (taxLogger != null) {
             taxLogger.disable();
             taxLogger = null;
         }
+
+        if (database != null) {
+            database.disable();
+            database = null;
+        }
+
+        commandDispatcher = null;     
+        messages = null;
+        logger = null;
     }
 
+    public void reload() {
+        onDisable();
+        onEnable();
+    }
 }

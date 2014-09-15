@@ -3,6 +3,16 @@ locale: ja-JP
 log:
   enable: true
   path: tax.log
+  
+database:
+  enable: false
+  debug: false
+  host: localhost
+  # port: 3306
+  database: takenomics
+  # tablePrefix: ''
+  user: root
+  # password: ''
 
 taxOnSavings:
   enable: true
@@ -30,4 +40,3 @@ redstoneTax:
   taxExempt:
   - towncenter
   - owner_farm
-

@@ -1,4 +1,9 @@
 name: Takenomics
 main: jp.dip.myuminecraft.takenomics.Takenomics
-version: 0.0.1-SNAPSHOT
+version: 0.0.2
 depend: [Vault, WorldGuard]
+commands:
+  takenomics:
+    usage: /takenomics <subcommand> ...
+    permission: <plugin name>.command
+    permission-message: You don't have <permission>.
