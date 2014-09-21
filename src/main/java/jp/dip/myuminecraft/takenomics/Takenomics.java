@@ -29,6 +29,7 @@ public class Takenomics extends JavaPlugin implements Listener {
     WorldGuardPlugin      worldGuard;
     TaxOnSavingsCollector taxOnSavingsCollector;
     RedstoneTaxCollector  redstoneTaxCollector;
+    private ChestShopMonitor chestShopMonitor;
 
     @Override
     public void onEnable() {
@@ -59,7 +60,19 @@ public class Takenomics extends JavaPlugin implements Listener {
             playerMonitor = null;
             if (database != null) {
                 playerMonitor = new PlayerMonitor(this, logger, database);
-                playerMonitor.enable();
+                if (! playerMonitor.enable()) {
+                    logger.warning("Disable player and world list synchronization.");
+                    playerMonitor = null;
+                }
+            }
+
+            chestShopMonitor = null;
+            if (playerMonitor != null) {
+                chestShopMonitor = new ChestShopMonitor(this, logger, database, playerMonitor);
+                if (! chestShopMonitor.enable()) {
+                    logger.warning("Disable ChestShop and MySQL connector.");
+                    chestShopMonitor = null;
+                }
             }
 
             taxLogger = new TaxLogger(this);

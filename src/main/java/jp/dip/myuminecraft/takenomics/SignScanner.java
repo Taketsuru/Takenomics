@@ -47,14 +47,8 @@ public class SignScanner {
     }
 
     static final int      interval           = 1;
-    static final int      sizeOfInt          = 4;
-    static final int      log2SectorSize     = 12;
-    static final int      regionXSize        = 32;
-    static final int      regionZSize        = 32;
-    static final int      chunksPerRegion    = regionXSize * regionZSize;
-    static final int      chunkLocationsSize = sizeOfInt * chunksPerRegion;
-    static final int      maxChunkSize       = 1024 * 1024;
     static final Pattern  regionFilePattern  = Pattern.compile("^r\\.(-?[0-9]+)\\.(-?[0-9]+)\\.mca$");
+    static final Pattern  xzCoordPattern     = Pattern.compile("^\\s*([-+]?[0-9]+),\\s*([-+]?[0-9]+)\\s$");
     JavaPlugin            plugin;
     Logger                logger;
     Messages              messages;
@@ -63,8 +57,8 @@ public class SignScanner {
     BukkitRunnable        scheduledTask;
     Queue<Request>        requests           = new LinkedList<Request>();
     List<Block>           signBlocks         = new ArrayList<Block>();
-    ByteBuffer            prefetchBuffer     = ByteBuffer.allocateDirect(maxChunkSize);
-    ByteBuffer            chunkLocations     = ByteBuffer.allocateDirect(chunkLocationsSize);
+    ByteBuffer            prefetchBuffer     = ByteBuffer.allocateDirect(Constants.maxChunkSize);
+    ByteBuffer            chunkLocations     = ByteBuffer.allocateDirect(Constants.chunkLocationsSize);
     DirectoryStream<Path> directoryStream;
     Iterator<Path>        regionFiles;
     Path                  currentFile;
@@ -212,15 +206,15 @@ public class SignScanner {
             Request request = requests.peek();
             World world = request.world;
 
-            if (chunksPerRegion <= nextChunk) {
+            if (Constants.chunksPerRegion <= nextChunk) {
                 currentFile = null;
                 continue;
             }
 
-            if (chunkLocations.getInt(nextChunk * sizeOfInt) != 0) {
+            if (chunkLocations.getInt(nextChunk * Constants.sizeOfInt) != 0) {
 
-                int chunkX = regionX + nextChunk % regionXSize;
-                int chunkZ = regionZ + nextChunk / regionXSize;
+                int chunkX = regionX + nextChunk % Constants.regionXSize;
+                int chunkZ = regionZ + nextChunk / Constants.regionXSize;
 
                 switch (chunkState) {
 
@@ -261,9 +255,6 @@ public class SignScanner {
 
             ++nextChunk;
             chunkState = ChunkState.notReady;
-            if (nextChunk % 32 == 0) {
-                logger.info("processed %d chunks", nextChunk);
-            }
         }
 
         schedule();
@@ -272,18 +263,13 @@ public class SignScanner {
     void scanChunk(Chunk chunk) {
         signBlocks.clear();
 
-        int chunkXSize = 16;
-        int chunkYSize = 256;
-        int chunkZSize = 16;
-
-        for (int y = 0; y < chunkYSize; ++y) {
-            for (int z = 0; z < chunkZSize; ++z) {
-                for (int x = 0; x < chunkXSize; ++x) {
+        for (int y = 0; y < Constants.chunkYSize; ++y) {
+            for (int z = 0; z < Constants.chunkZSize; ++z) {
+                for (int x = 0; x < Constants.chunkXSize; ++x) {
                     Block block = chunk.getBlock(x, y, z);
                     switch (block.getType()) {
                     case SIGN_POST:
                     case WALL_SIGN:
-                        logger.info("scanChunk: found: %d,%d,%d", x, y, z);
                         signBlocks.add(block);
                         break;
 
@@ -302,11 +288,11 @@ public class SignScanner {
     }
 
     void fetch() {
-        int loc = chunkLocations.getInt(nextChunk * sizeOfInt);
+        int loc = chunkLocations.getInt(nextChunk * Constants.sizeOfInt);
         assert loc != 0;
         
-        int offset = (loc >> 8) << log2SectorSize;
-        int count = (loc & 0xff) << log2SectorSize;
+        int offset = (loc >> 8) << Constants.log2SectorSize;
+        int count = (loc & 0xff) << Constants.log2SectorSize;
 
         try (SeekableByteChannel channel = Files.newByteChannel(
                 currentFile, StandardOpenOption.READ)) {
@@ -331,6 +317,12 @@ public class SignScanner {
     void addCommands() {
         scanSignsDispatcher = new CommandDispatcher(commandDispatcher, "scansigns");
         
+        scanSignsDispatcher.addCommand("chunk", new CommandExecutor() {
+            public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
+                return onScansignsChunkCommand(sender, cmd, label, args);
+            }
+        });                
+
         scanSignsDispatcher.addCommand("world", new CommandExecutor() {
             public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
                 return onScansignsWorldCommand(sender, cmd, label, args);
@@ -342,6 +334,48 @@ public class SignScanner {
                 return onScansignsAllCommand(sender, cmd, label,args);
             }
         });
+    }
+
+    boolean onScansignsChunkCommand(CommandSender sender,
+            Command cmd, String label, String[] args) {
+        int cmdPos = scanSignsDispatcher.getCommandPosition();
+
+        if (args.length == cmdPos + 1) {
+            if (! (sender instanceof Player)) {
+                messages.send(sender, "notAConsoleCommand",
+                        scanSignsDispatcher.getCommandString(cmd, args));
+                return true;
+            }
+            scanChunk(((Player)sender).getLocation().getChunk());
+            return true;
+        }
+
+        if (args.length == cmdPos + 3) {
+            String worldName = args[cmdPos + 1];
+            World world = sender.getServer().getWorld(worldName);
+            if (world == null) {
+                messages.send(sender, "worldNotFound", worldName);
+                return true;
+            }
+
+            String coord = args[cmdPos + 2];
+            Matcher matcher = xzCoordPattern.matcher(coord);
+            if (! matcher.matches()) {
+                messages.send(sender, "signScannerXzCoordsAreExpected", coord);
+               return true;
+            }
+            
+            int x = Integer.parseInt(matcher.group(1)) / Constants.chunkXSize;
+            int z = Integer.parseInt(matcher.group(2)) / Constants.chunkZSize;
+            world.loadChunk(x, z, false);
+            if (world.isChunkLoaded(x, z)) {
+                scanChunk(world.getChunkAt(x, z));
+                world.unloadChunkRequest(x, z);
+            }
+            return true;
+        }
+
+        return false;
     }
 
     boolean onScansignsWorldCommand(CommandSender sender, Command cmd, String label, String[] args) {
