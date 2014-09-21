@@ -127,11 +127,9 @@ public class SignScanner {
         majorLoop: while (System.nanoTime() < etime) {
 
             if (directoryStream == null) {
-                logger.info("processRequests: loading regions folder");
                 do {
                     Request head = requests.peek();
                     if (head == null) {
-                        logger.info("processRequests: stop");
                         running = false;
                         scheduledTask = null;
                         return;
@@ -155,7 +153,6 @@ public class SignScanner {
             }
 
             while (currentFile == null) {
-                logger.info("processRequests: loading region file");
                 if (!regionFiles.hasNext()) {
                     try {
                         directoryStream.close();
@@ -179,7 +176,6 @@ public class SignScanner {
                     continue;
                 }
 
-                logger.info("processRequests: file %s", currentFile.toString());
                 try (SeekableByteChannel channel = Files.newByteChannel(
                         currentFile, StandardOpenOption.READ)) {
                     chunkLocations.clear();
@@ -201,7 +197,6 @@ public class SignScanner {
                 chunkState = ChunkState.notReady;
                 regionX = Integer.parseInt(matcher.group(1)) * 32;
                 regionZ = Integer.parseInt(matcher.group(2)) * 32;
-                logger.info("processRequests: region x = %d, region z = %d", regionX, regionZ);
             }
 
             Request request = requests.peek();
@@ -282,7 +277,6 @@ public class SignScanner {
         }
 
         if (!signBlocks.isEmpty()) {
-            logger.info("scanChunk: notifying");
             Event event = new SignScanEvent(chunk, signBlocks);
             plugin.getServer().getPluginManager().callEvent(event);
         }
@@ -306,10 +300,7 @@ public class SignScanner {
                 }
             }
         } catch (IOException e) {
-            logger.warning("%s", e.toString());
-            for (StackTraceElement elm : e.getStackTrace()) {
-                logger.warning("%s", elm.toString());
-            }
+            logger.warning(e, "Failed to prefetch region file.");
         }
 
         chunkState = ChunkState.loading;

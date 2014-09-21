@@ -13,6 +13,7 @@ import java.util.Queue;
 
 import jp.dip.myuminecraft.takenomics.Constants;
 import jp.dip.myuminecraft.takenomics.Database;
+import jp.dip.myuminecraft.takenomics.JobQueue;
 import jp.dip.myuminecraft.takenomics.Logger;
 import jp.dip.myuminecraft.takenomics.PlayerMonitor;
 import jp.dip.myuminecraft.takenomics.SignScanEvent;
@@ -57,7 +58,6 @@ public class ChestShopMonitor implements Listener {
             world = playerMonitor.getWorldId(sign.getWorld());
 
             String nameOnSign = lines[ChestShopSign.NAME_LINE];
-            logger.info("nameOnSign=" + nameOnSign);
             String ownerName = nameOnSign.isEmpty()
                     ? player.getName()
                     : uName.getName(nameOnSign);
@@ -90,7 +90,6 @@ public class ChestShopMonitor implements Listener {
     private Logger            logger;
     private Database          database;
     private PlayerMonitor     playerMonitor;
-    private Queue<Runnable>   requests = new ArrayDeque<Runnable>();
     private PreparedStatement truncateTemporary;
     private PreparedStatement startTransaction;
     private PreparedStatement deleteObsoleteShops;
@@ -100,7 +99,6 @@ public class ChestShopMonitor implements Listener {
     private PreparedStatement selectIdFromShops;
     private PreparedStatement insertShop;
     private PreparedStatement insertShopReturnKey;
-    private BukkitRunnable    scheduledTask;
 
     public ChestShopMonitor(JavaPlugin plugin, Logger logger,
             Database database, PlayerMonitor playerMonitor) {
@@ -122,10 +120,7 @@ public class ChestShopMonitor implements Listener {
             prepareStatements();
             truncateTemporary.executeUpdate();
         } catch (SQLException e) {
-            logger.warning("Failed to initialize ChestShop monitor: %s", e.toString());
-            for (StackTraceElement t : e.getStackTrace()) {
-                logger.warning(t.toString());
-            }
+            logger.warning(e, "Failed to initialize ChestShop monitor.");
             disable();
             return false;
         }
@@ -284,46 +279,14 @@ public class ChestShopMonitor implements Listener {
             }
 
             if (! signs.isEmpty()) {
-                runAsynchronously(new Runnable() {
+                database.runAsynchronously(new Runnable() {
                     public void run() {
                         syncSigns(chunkX, chunkZ, signs);
                     }
                 });
             }
         } catch (Exception e) {
-            logger.warning("Failed to update scanned signs: %s", e.toString());
-        }
-    }
-    
-    public synchronized void runAsynchronously(Runnable runnable) {
-        requests.add(runnable);
-        if (scheduledTask == null) {
-            new BukkitRunnable() {
-                public void run() {
-                    processAsyncTasks();
-                }
-            }.runTaskAsynchronously(plugin);
-        }
-    }
-    
-    void processAsyncTasks() {
-        Runnable task;
-        synchronized (this) {
-            assert ! requests.isEmpty();
-            task = requests.peek();
-        }
-
-        for (;;) {
-            task.run();
-
-            synchronized (this) {
-                requests.poll();
-                if (requests.isEmpty()) {
-                    scheduledTask = null;
-                    return;
-                }
-                task = requests.peek();
-            }            
+            logger.warning(e, "Failed to update scanned signs.");
         }
     }
     
@@ -363,7 +326,7 @@ public class ChestShopMonitor implements Listener {
             truncateTemporary.executeUpdate();
             commit.executeUpdate();
         } catch (SQLException e) {
-            logger.warning("Failed to sync chestshop_shops table: %s", e.toString());
+            logger.warning(e, "Failed to sync chestshop_shops table.");
         }
     }
     
@@ -380,7 +343,7 @@ public class ChestShopMonitor implements Listener {
         try {
             final ChestshopsRow row = new ChestshopsRow
                     (event.getPlayer(), event.getSign(), event.getSignLines());
-            runAsynchronously(new Runnable() {
+            database.runAsynchronously(new Runnable() {
                 public void run() {
                     try {
                         insertIntoShops(row);
@@ -433,7 +396,7 @@ public class ChestShopMonitor implements Listener {
         try {
             final ChestshopsRow row = new ChestshopsRow
                     (null, event.getSign(), event.getSign().getLines());
-            runAsynchronously(new Runnable() {
+            database.runAsynchronously(new Runnable() {
                 public void run() {
                     try {
                         deleteFromShops(row);
@@ -467,7 +430,7 @@ public class ChestShopMonitor implements Listener {
             final int amount = event.getStock()[0].getAmount();
             final TransactionType type = event.getTransactionType();
             final int playerId = playerMonitor.getPlayerId(event.getClient());
-            runAsynchronously(new Runnable() {
+            database.runAsynchronously(new Runnable() {
                 public void run() {
                     try {
                         insertTransactionRecord(row, playerId, type, amount);

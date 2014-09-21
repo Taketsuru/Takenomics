@@ -13,11 +13,13 @@ public class Database {
     JavaPlugin plugin;
     Logger     logger;
     Connection connection;
+    JobQueue   queue;
     boolean    debug;
 
     public Database(JavaPlugin plugin, Logger logger) {
         this.plugin = plugin;
         this.logger = logger;
+        queue = new JobQueue(plugin);
     }
 
     public boolean enable() {
@@ -93,6 +95,8 @@ public class Database {
     }
     
     public void disable() {
+        queue.drain();
+
         if (connection == null) {
             return;
         }
@@ -100,7 +104,7 @@ public class Database {
         try {
             connection.close();
         } catch (SQLException e) {
-            logger.warning("Failed to close connection.  %s", e.getMessage());            
+            logger.warning(e, "Failed to close connection.");            
         }
         connection = null;
     }
@@ -126,6 +130,10 @@ public class Database {
         result.append(name.substring(from));
         
         return result.toString();
+    }
+
+    public void runAsynchronously(Runnable runnable) {
+        queue.runAsynchronously(runnable);
     }
 
 }
