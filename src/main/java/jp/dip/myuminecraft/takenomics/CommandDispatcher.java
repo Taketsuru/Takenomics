@@ -37,6 +37,25 @@ public class CommandDispatcher implements CommandExecutor {
         this.permissionPrefix = parent.permissionPrefix + subcommand + ".";
         parent.addCommand(subcommand, this);
     }
+    
+    public int getCommandPosition() {
+        return commandPosition;
+    }
+
+    public void addCommand(String subcommand, CommandExecutor executor) {
+        assert ! table.containsKey(subcommand);
+        String permission = permissionPrefix + subcommand.toLowerCase();
+        table.put(subcommand, new CommandInfo(executor, permission));
+    }
+    
+    public String getCommandString(Command cmd, String[] args) {
+        StringBuffer buffer = new StringBuffer(cmd.getName());
+        for (int i = 0; i <= commandPosition; ++i) {
+            buffer.append(' ');
+            buffer.append(args[i]);
+        }
+        return buffer.toString();
+    }
 
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         if (args.length <= commandPosition) {
@@ -52,23 +71,12 @@ public class CommandDispatcher implements CommandExecutor {
         if (! sender.isOp() && sender instanceof Player
                 && ! ((Player)sender).hasPermission(info.permission)) {
 
-            StringBuffer buffer = new StringBuffer(cmd.getName());
-            for (int i = 0; i <= commandPosition; ++i) {
-                buffer.append(' ');
-                buffer.append(args[i]);
-            }
-
-            messages.chat((Player)sender, "noPermissionToRunCommand", buffer.toString());
+            String cmdStr = getCommandString(cmd, args);
+            messages.send((Player)sender, "noPermissionToRunCommand", cmdStr);
 
             return true;
         }
 
         return info.executor.onCommand(sender, cmd, label, args);
-    }
-    
-    public void addCommand(String subcommand, CommandExecutor executor) {
-        assert ! table.containsKey(subcommand);
-        String permission = permissionPrefix + subcommand.toLowerCase();
-        table.put(subcommand, new CommandInfo(executor, permission));
     }
 }

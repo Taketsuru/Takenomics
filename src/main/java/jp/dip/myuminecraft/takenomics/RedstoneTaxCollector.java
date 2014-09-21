@@ -259,13 +259,13 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
 
         Player onlinePlayer = payer.isOnline() ? payer.getPlayer() : null;
         if (onlinePlayer != null && 0.0 < tax) {
-            messages.chat(onlinePlayer, "redstoneTaxNoticeHeader");
-            messages.chat(onlinePlayer, "redstoneTaxNoticeSwitching", charge);
-            messages.chat(onlinePlayer, "redstoneTaxNoticeRate", rate);
+            messages.send(onlinePlayer, "redstoneTaxNoticeHeader");
+            messages.send(onlinePlayer, "redstoneTaxNoticeSwitching", charge);
+            messages.send(onlinePlayer, "redstoneTaxNoticeRate", rate);
             if (0.0 < arrears) {
-                messages.chat(onlinePlayer, "redstoneTaxNoticeArrears", arrears);
+                messages.send(onlinePlayer, "redstoneTaxNoticeArrears", arrears);
             }
-            messages.chat(onlinePlayer, "redstoneTaxNoticeTotal", tax);
+            messages.send(onlinePlayer, "redstoneTaxNoticeTotal", tax);
         }
 
         String playerName = payer.getName();
@@ -285,7 +285,7 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
         if (0.0 < paid) {
             economy.withdrawPlayer(playerName, paid);
             if (onlinePlayer != null) {
-                messages.chat(onlinePlayer, "redstoneTaxCollected", paid);
+                messages.send(onlinePlayer, "redstoneTaxCollected", paid);
             }
         }
 

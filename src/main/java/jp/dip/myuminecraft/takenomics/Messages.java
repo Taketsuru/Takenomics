@@ -4,7 +4,7 @@ import java.io.UnsupportedEncodingException;
 import java.util.Locale;
 import java.util.ResourceBundle;
 
-import org.bukkit.entity.Player;
+import org.bukkit.command.CommandSender;
 
 public class Messages {
 
@@ -24,8 +24,8 @@ public class Messages {
         }
     }
 
-    public void chat(Player player, String formatKey, Object...args) {
-        player.sendMessage(String.format(locale, getString(formatKey), args));
+    public void send(CommandSender sender, String formatKey, Object...args) {
+        sender.sendMessage(String.format(locale, getString(formatKey), args));
     }
 
 }

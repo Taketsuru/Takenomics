@@ -11,10 +11,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 public class Database {
 
     JavaPlugin plugin;
-    Logger logger;
+    Logger     logger;
     Connection connection;
-    String tablePrefix = "";
-    boolean debug;
+    boolean    debug;
 
     public Database(JavaPlugin plugin, Logger logger) {
         this.plugin = plugin;
@@ -28,7 +27,6 @@ public class Database {
         String configHost = configPrefix + ".host";
         String configPort = configPrefix + ".port";
         String configDatabase = configPrefix + ".database";
-        String configTablePrefix = configPrefix + ".tablePrefix";
         String configUser = configPrefix + ".user";
         String configPassword = configPrefix + ".password";
 
@@ -57,10 +55,6 @@ public class Database {
             }
         }
         
-        if (config.contains(configTablePrefix)) {
-            tablePrefix = config.getString(configTablePrefix);
-        }
-
         if (! config.contains(configHost)) {
             logger.warning("'%s' is not configured.", configHost);
             return false;
@@ -99,8 +93,6 @@ public class Database {
     }
     
     public void disable() {
-        tablePrefix = "";
-
         if (connection == null) {
             return;
         }
@@ -112,4 +104,28 @@ public class Database {
         }
         connection = null;
     }
+    
+    public Connection getConnection() {
+        return connection;
+    }
+
+    public static String escapeSingleQuotes(String name) {
+        int to = name.indexOf('\'');
+        if (to == -1) {
+            return name;
+        }
+
+        StringBuilder result = new StringBuilder();
+        int from = 0;
+        do {
+            result.append(name.substring(from, to));
+            result.append("''");
+            from = to + 1;
+            to = name.indexOf('\'', from);
+        } while (to != -1);
+        result.append(name.substring(from));
+        
+        return result.toString();
+    }
+
 }

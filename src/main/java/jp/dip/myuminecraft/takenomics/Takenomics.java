@@ -21,7 +21,9 @@ public class Takenomics extends JavaPlugin implements Listener {
     Logger                logger;
     Messages              messages;
     CommandDispatcher     commandDispatcher;
+    SignScanner           signScanner;
     Database              database;
+    PlayerMonitor         playerMonitor;
     TaxLogger             taxLogger;
     Economy               economy;
     WorldGuardPlugin      worldGuard;
@@ -41,10 +43,23 @@ public class Takenomics extends JavaPlugin implements Listener {
 
             registerReloadCommand();
 
+            signScanner = new SignScanner(this, logger, messages, commandDispatcher);
+            signScanner.enable();
+
             database = new Database(this, logger);
             if (! database.enable()) {
                 logger.warning("Disable database access.");
                 database = null;
+            }
+
+            if (database.getConnection() == null) {
+                database = null;
+            }
+
+            playerMonitor = null;
+            if (database != null) {
+                playerMonitor = new PlayerMonitor(this, logger, database);
+                playerMonitor.enable();
             }
 
             taxLogger = new TaxLogger(this);
@@ -150,13 +165,14 @@ public class Takenomics extends JavaPlugin implements Listener {
             database = null;
         }
 
+        signScanner = null;
         commandDispatcher = null;     
         messages = null;
         logger = null;
     }
 
     public void reload() {
-        onDisable();
-        onEnable();
+        getServer().getPluginManager().disablePlugin(this);
+        getServer().getPluginManager().enablePlugin(this);        
     }
 }

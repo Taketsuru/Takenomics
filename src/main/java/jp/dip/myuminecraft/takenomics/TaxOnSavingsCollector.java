@@ -92,7 +92,7 @@ public class TaxOnSavingsCollector extends PeriodicTaxCollector implements Liste
             EconomyResponse response = economy.withdrawPlayer(payer.getName(), tax);
             if (response.transactionSuccess()) {
                 if (payer.isOnline()) {
-                    messages.chat(payer.getPlayer(), "taxCollected", (long) tax);
+                    messages.send(payer.getPlayer(), "taxCollected", (long) tax);
                 }
 
                 taxLogger.put(new Record(System.currentTimeMillis(), payer, balance, rate));
