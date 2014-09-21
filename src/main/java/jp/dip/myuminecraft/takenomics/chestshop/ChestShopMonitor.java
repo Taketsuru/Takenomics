@@ -138,7 +138,7 @@ public class ChestShopMonitor implements Listener {
         Connection connection = database.getConnection();
 
         Statement statement = connection.createStatement();
-        statement.execute("CREATE TABLE IF NOT EXISTS chestshops ("
+        statement.execute("CREATE TABLE IF NOT EXISTS chestshop_shops ("
                 + "id SMALLINT UNSIGNED AUTO_INCREMENT NOT NULL,"
                 + "x SMALLINT NOT NULL,"
                 + "z SMALLINT NOT NULL,"
@@ -163,10 +163,10 @@ public class ChestShopMonitor implements Listener {
                 + "type ENUM('buy', 'sell') NOT NULL,"
                 + "quantity SMALLINT NOT NULL,"
                 + "PRIMARY KEY (id),"
-                + "FOREIGN KEY (shop) REFERENCES chestshops (id) ON DELETE CASCADE,"
+                + "FOREIGN KEY (shop) REFERENCES chestshop_shops (id) ON DELETE CASCADE,"
                 + "FOREIGN KEY (player) REFERENCES players (id) ON DELETE CASCADE"
                 + ")");
-        statement.execute("CREATE TEMPORARY TABLE IF NOT EXISTS scanned_chestshops ("
+        statement.execute("CREATE TEMPORARY TABLE IF NOT EXISTS chestshop_scanned_shops ("
                 + "x SMALLINT NOT NULL,"
                 + "z SMALLINT NOT NULL,"
                 + "y SMALLINT NOT NULL,"
@@ -183,47 +183,47 @@ public class ChestShopMonitor implements Listener {
     void prepareStatements() throws SQLException {
         Connection connection = database.getConnection();
 
-        truncateTemporary = connection.prepareStatement("TRUNCATE scanned_chestshops");
+        truncateTemporary = connection.prepareStatement("TRUNCATE chestshop_scanned_shops");
         startTransaction = connection.prepareStatement("START TRANSACTION");
-        deleteObsoleteShops = connection.prepareStatement("DELETE FROM chestshops "
-                + "USING chestshops LEFT JOIN scanned_chestshops "
-                + "ON chestshops.x = scanned_chestshops.x "
-                + "AND chestshops.z = scanned_chestshops.z "
-                + "AND chestshops.y = scanned_chestshops.y "
-                + "AND chestshops.world = scanned_chestshops.world "
-                + "WHERE ? <= chestshops.x AND chestshops.x < ? "
-                + "AND ? <= chestshops.z AND chestshops.z < ? "
-                + "AND (scanned_chestshops.x IS NULL "
-                + "OR ! chestshops.owner <=> scanned_chestshops.owner "
-                + "OR chestshops.quantity != scanned_chestshops.quantity "
-                + "OR chestshops.material != scanned_chestshops.material "
-                + "OR chestshops.buy_price != scanned_chestshops.buy_price "
-                + "OR chestshops.sell_price != scanned_chestshops.sell_price)");
-        insertNewShops = connection.prepareStatement("INSERT INTO chestshops "
+        deleteObsoleteShops = connection.prepareStatement("DELETE FROM chestshop_shops "
+                + "USING chestshop_shops LEFT JOIN chestshop_scanned_shops "
+                + "ON chestshop_shops.x = chestshop_scanned_shops.x "
+                + "AND chestshop_shops.z = chestshop_scanned_shops.z "
+                + "AND chestshop_shops.y = chestshop_scanned_shops.y "
+                + "AND chestshop_shops.world = chestshop_scanned_shops.world "
+                + "WHERE ? <= chestshop_shops.x AND chestshop_shops.x < ? "
+                + "AND ? <= chestshop_shops.z AND chestshop_shops.z < ? "
+                + "AND (chestshop_scanned_shops.x IS NULL "
+                + "OR ! chestshop_shops.owner <=> chestshop_scanned_shops.owner "
+                + "OR chestshop_shops.quantity != chestshop_scanned_shops.quantity "
+                + "OR chestshop_shops.material != chestshop_scanned_shops.material "
+                + "OR chestshop_shops.buy_price != chestshop_scanned_shops.buy_price "
+                + "OR chestshop_shops.sell_price != chestshop_scanned_shops.sell_price)");
+        insertNewShops = connection.prepareStatement("INSERT INTO chestshop_shops "
                 + "SELECT NULL,"
-                + "scanned_chestshops.x,"
-                + "scanned_chestshops.z,"
-                + "scanned_chestshops.y,"
-                + "scanned_chestshops.world,"
-                + "scanned_chestshops.owner,"
-                + "scanned_chestshops.quantity,"
-                + "scanned_chestshops.material,"
-                + "scanned_chestshops.buy_price,"
-                + "scanned_chestshops.sell_price "
-                + "FROM scanned_chestshops LEFT JOIN chestshops "
-                + "ON chestshops.x = scanned_chestshops.x "
-                + "AND chestshops.z = scanned_chestshops.z "
-                + "AND chestshops.y = scanned_chestshops.y "
-                + "AND chestshops.world = scanned_chestshops.world "
-                + "WHERE chestshops.id IS NULL");
+                + "chestshop_scanned_shops.x,"
+                + "chestshop_scanned_shops.z,"
+                + "chestshop_scanned_shops.y,"
+                + "chestshop_scanned_shops.world,"
+                + "chestshop_scanned_shops.owner,"
+                + "chestshop_scanned_shops.quantity,"
+                + "chestshop_scanned_shops.material,"
+                + "chestshop_scanned_shops.buy_price,"
+                + "chestshop_scanned_shops.sell_price "
+                + "FROM chestshop_scanned_shops LEFT JOIN chestshop_shops "
+                + "ON chestshop_shops.x = chestshop_scanned_shops.x "
+                + "AND chestshop_shops.z = chestshop_scanned_shops.z "
+                + "AND chestshop_shops.y = chestshop_scanned_shops.y "
+                + "AND chestshop_shops.world = chestshop_scanned_shops.world "
+                + "WHERE chestshop_shops.id IS NULL");
         commit = connection.prepareStatement("COMMIT");
         insertShop = connection.prepareStatement
-                ("INSERT INTO chestshops VALUES (NULL,?,?,?,?,?,?,?,?,?)");
+                ("INSERT INTO chestshop_shops VALUES (NULL,?,?,?,?,?,?,?,?,?)");
         insertShopReturnKey = connection.prepareStatement
-                ("INSERT INTO chestshops VALUES (NULL,?,?,?,?,?,?,?,?,?)",
+                ("INSERT INTO chestshop_shops VALUES (NULL,?,?,?,?,?,?,?,?,?)",
                   Statement.RETURN_GENERATED_KEYS);
         selectIdFromShops = connection.prepareStatement
-                ("SELECT id FROM chestshops WHERE x=? AND z=? AND y=? AND world=?");
+                ("SELECT id FROM chestshop_shops WHERE x=? AND z=? AND y=? AND world=?");
         insertTransaction = connection.prepareStatement
                 ("INSERT INTO chestshop_transactions VALUES (NULL,NULL,?,?,?,?)");
     }
@@ -329,7 +329,7 @@ public class ChestShopMonitor implements Listener {
     
     void syncSigns(int chunkX, int chunkZ, List<ChestshopsRow> scannedSigns) {
         StringBuilder insert =
-                new StringBuilder("INSERT INTO scanned_chestshops VALUES ");
+                new StringBuilder("INSERT INTO chestshop_scanned_shops VALUES ");
         boolean first = true;
         for (ChestshopsRow row : scannedSigns) {
             if (! first) {
@@ -363,7 +363,7 @@ public class ChestShopMonitor implements Listener {
             truncateTemporary.executeUpdate();
             commit.executeUpdate();
         } catch (SQLException e) {
-            logger.warning("Failed to sync chestshops table: %s", e.toString());
+            logger.warning("Failed to sync chestshop_shops table: %s", e.toString());
         }
     }
     
@@ -449,7 +449,7 @@ public class ChestShopMonitor implements Listener {
 
     void deleteFromShops(ChestshopsRow row) throws SQLException {
         try (Statement statement = database.getConnection().createStatement()) {
-            String stmt = String.format("DELETE FROM chestshops WHERE "
+            String stmt = String.format("DELETE FROM chestshop_shops WHERE "
                     + "x = %d "
                     + "AND z = %d "
                     + "AND y = %d "
