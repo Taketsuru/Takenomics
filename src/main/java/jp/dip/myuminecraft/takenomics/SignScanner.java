@@ -19,6 +19,7 @@ import org.bukkit.Chunk;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.Sign;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -56,7 +57,7 @@ public class SignScanner {
     CommandDispatcher     scanSignsDispatcher;
     BukkitRunnable        scheduledTask;
     Queue<Request>        requests           = new LinkedList<Request>();
-    List<Block>           signBlocks         = new ArrayList<Block>();
+    List<Sign>            signBlocks         = new ArrayList<Sign>();
     ByteBuffer            prefetchBuffer     = ByteBuffer.allocateDirect(Constants.maxChunkSize);
     ByteBuffer            chunkLocations     = ByteBuffer.allocateDirect(Constants.chunkLocationsSize);
     DirectoryStream<Path> directoryStream;
@@ -270,7 +271,7 @@ public class SignScanner {
                     switch (block.getType()) {
                     case SIGN_POST:
                     case WALL_SIGN:
-                        signBlocks.add(block);
+                        signBlocks.add((Sign)block.getState());
                         break;
 
                     default:

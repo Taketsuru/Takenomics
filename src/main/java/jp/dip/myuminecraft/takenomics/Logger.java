@@ -16,4 +16,16 @@ public class Logger {
         logger.info(String.format(null, format, args));
     }
 
+    public void printStackTrace(Throwable th) {
+        for (StackTraceElement t : th.getStackTrace()) {
+            logger.warning(t.toString());
+        }
+    }
+
+    public void warning(Throwable th, String format, Object... args) {
+        logger.warning(String.format(null, format, args));
+        logger.warning(th.toString());
+        printStackTrace(th);
+    }
+
 }

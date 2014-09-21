@@ -3,7 +3,7 @@ package jp.dip.myuminecraft.takenomics;
 import java.util.List;
 
 import org.bukkit.Chunk;
-import org.bukkit.block.Block;
+import org.bukkit.block.Sign;
 import org.bukkit.event.Event;
 import org.bukkit.event.HandlerList;
 
@@ -11,7 +11,7 @@ public class SignScanEvent extends Event {
     
     private static final HandlerList handlers = new HandlerList();
     Chunk                            chunk;
-    List<Block>                      signs;
+    List<Sign>                       signs;
 
     public HandlerList getHandlers() {
         return handlers;
@@ -25,11 +25,11 @@ public class SignScanEvent extends Event {
         return chunk;
     }
     
-    public List<Block> getSigns() {
+    public List<Sign> getSigns() {
         return signs;
     }
 
-    SignScanEvent(Chunk chunk, List<Block> signs) {
+    SignScanEvent(Chunk chunk, List<Sign> signs) {
         this.chunk = chunk;
         this.signs = signs;
     }
