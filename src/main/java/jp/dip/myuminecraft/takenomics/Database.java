@@ -14,7 +14,6 @@ public class Database {
     Logger     logger;
     Connection connection;
     JobQueue   queue;
-    boolean    debug;
 
     public Database(JavaPlugin plugin, Logger logger) {
         this.plugin = plugin;
@@ -46,15 +45,6 @@ public class Database {
 
         if (! config.getBoolean(configEnable)) {
             return true;
-        }
-
-        debug = false;
-        if (config.contains(configDebug)) {
-            if (! config.isBoolean(configDebug)) {
-                logger.warning("'%s' is not a boolean.", configDebug);
-            } else {
-                debug = config.getBoolean(configDebug);
-            }
         }
         
         if (! config.contains(configHost)) {
