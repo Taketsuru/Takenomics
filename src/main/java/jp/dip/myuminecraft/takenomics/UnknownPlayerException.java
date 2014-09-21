@@ -4,7 +4,7 @@ public class UnknownPlayerException extends Exception {
 
     private static final long serialVersionUID = 1L;
 
-    UnknownPlayerException(String message) {
+    public UnknownPlayerException(String message) {
         super(message);
     }
 

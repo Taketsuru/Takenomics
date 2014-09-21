@@ -3,6 +3,7 @@ package jp.dip.myuminecraft.takenomics;
 import java.util.IllformedLocaleException;
 import java.util.Locale;
 
+import jp.dip.myuminecraft.takenomics.chestshop.ChestShopMonitor;
 import net.milkbowl.vault.economy.Economy;
 
 import org.bukkit.command.Command;
