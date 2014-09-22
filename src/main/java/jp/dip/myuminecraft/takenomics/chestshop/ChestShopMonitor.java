@@ -41,7 +41,7 @@ public class ChestShopMonitor implements Listener {
         int z;
         int y;
         int world;
-        int owner;
+        String owner;
         int quantity;
         String material;
         double buyPrice;
@@ -72,7 +72,7 @@ public class ChestShopMonitor implements Listener {
                             sign.getY(), sign.getZ(), ownerName));
                 }
             }
-            owner = ownerPlayer == null ? 0 : playerTable.getId(ownerPlayer);
+            owner = ownerPlayer == null ? null : ownerPlayer.getName();
             
             quantity = Integer.parseInt(lines[ChestShopSign.QUANTITY_LINE]);
             material = lines[ChestShopSign.ITEM_LINE];
@@ -89,10 +89,8 @@ public class ChestShopMonitor implements Listener {
     private PlayerTable       playerTable;
     private WorldTable        worldTable;
     private PreparedStatement truncateTemporary;
-    private PreparedStatement startTransaction;
     private PreparedStatement deleteObsoleteShops;
     private PreparedStatement insertNewShops;
-    private PreparedStatement commit;
     private PreparedStatement insertTransaction;
     private PreparedStatement selectIdFromShops;
     private PreparedStatement insertShop;
@@ -178,7 +176,6 @@ public class ChestShopMonitor implements Listener {
         Connection connection = database.getConnection();
 
         truncateTemporary = connection.prepareStatement("TRUNCATE chestshop_scanned_shops");
-        startTransaction = connection.prepareStatement("START TRANSACTION");
         deleteObsoleteShops = connection.prepareStatement("DELETE FROM chestshop_shops "
                 + "USING chestshop_shops LEFT JOIN chestshop_scanned_shops "
                 + "ON chestshop_shops.x = chestshop_scanned_shops.x "
@@ -210,7 +207,6 @@ public class ChestShopMonitor implements Listener {
                 + "AND chestshop_shops.y = chestshop_scanned_shops.y "
                 + "AND chestshop_shops.world = chestshop_scanned_shops.world "
                 + "WHERE chestshop_shops.id IS NULL");
-        commit = connection.prepareStatement("COMMIT");
         insertShop = connection.prepareStatement
                 ("INSERT INTO chestshop_shops VALUES (NULL,?,?,?,?,?,?,?,?,?)");
         insertShopReturnKey = connection.prepareStatement
@@ -224,10 +220,6 @@ public class ChestShopMonitor implements Listener {
 
     public void disable() {
         try {
-            if (startTransaction != null) {
-                startTransaction.close();
-                startTransaction = null;
-            }
             if (truncateTemporary != null) {
                 truncateTemporary.close();
                 truncateTemporary = null;
@@ -239,10 +231,6 @@ public class ChestShopMonitor implements Listener {
             if (insertNewShops != null) {
                 insertNewShops.close();
                 insertNewShops = null;
-            }
-            if (commit != null) {
-                commit.close();
-                commit = null;
             }
             if (insertShop != null) {
                 insertShop.close();
@@ -290,31 +278,33 @@ public class ChestShopMonitor implements Listener {
     }
     
     void syncSigns(int chunkX, int chunkZ, List<ChestshopsRow> scannedSigns) {
-        StringBuilder insert =
-                new StringBuilder("INSERT INTO chestshop_scanned_shops VALUES ");
-        boolean first = true;
-        for (ChestshopsRow row : scannedSigns) {
-            if (! first) {
-                insert.append(",");
-            } else {
-                first = false;
-            }
-            
-            insert.append(String.format("(%d,%d,%d,%d",
-                    row.x, row.z, row.y, row.world));
-            insert.append(row.owner != 0
-                    ? String.format(",%d", row.owner)
-                    : ",NULL");
-            insert.append(String.format(",%d,'%s'",
-                    row.quantity, Database.escapeSingleQuotes(row.material)));
-            appendPrice(insert, row.buyPrice);
-            appendPrice(insert, row.sellPrice);
-            insert.append(")");
-        }
-
         Connection connection = database.getConnection();
+
         try (Statement statement = connection.createStatement()) {
-            startTransaction.execute();
+            StringBuilder insert =
+                    new StringBuilder("INSERT INTO chestshop_scanned_shops VALUES ");
+            boolean first = true;
+            for (ChestshopsRow row : scannedSigns) {
+                if (! first) {
+                    insert.append(",");
+                } else {
+                    first = false;
+                }
+                
+                insert.append(String.format("(%d,%d,%d,%d",
+                        row.x, row.z, row.y, row.world));
+                insert.append(row.owner != null
+                        ? String.format(",%d", playerTable.getId(row.owner))
+                        : ",NULL");
+                insert.append(String.format(",%d,'%s'",
+                        row.quantity, Database.escapeSingleQuotes(row.material)));
+                appendPrice(insert, row.buyPrice);
+                appendPrice(insert, row.sellPrice);
+                insert.append(")");
+            }
+
+            connection.setAutoCommit(false);
+
             statement.executeUpdate(insert.toString());
             deleteObsoleteShops.setInt(1, chunkX * Constants.chunkXSize);
             deleteObsoleteShops.setInt(2, (chunkX + 1) * Constants.chunkXSize);
@@ -323,9 +313,16 @@ public class ChestShopMonitor implements Listener {
             deleteObsoleteShops.executeUpdate();
             insertNewShops.executeUpdate();
             truncateTemporary.executeUpdate();
-            commit.executeUpdate();
+
+            connection.commit();
         } catch (SQLException e) {
             logger.warning(e, "Failed to sync chestshop_shops table.");
+        } finally {
+            try {
+                connection.setAutoCommit(false);
+            } catch (SQLException e) {
+                logger.warning(e, "Failed to disable autoCommit.");
+            }
         }
     }
     
@@ -361,7 +358,7 @@ public class ChestShopMonitor implements Listener {
         stmt.setInt(2, row.z);
         stmt.setInt(3, row.y);
         stmt.setInt(4, row.world);
-        stmt.setInt(5, row.owner);
+        stmt.setInt(5, playerTable.getId(row.owner));
         stmt.setInt(6, row.quantity);
         stmt.setString(7, row.material);
         if (row.buyPrice != -1.0) {
@@ -445,9 +442,9 @@ public class ChestShopMonitor implements Listener {
 
     void insertTransactionRecord(ChestshopsRow row, int playerId,
             TransactionType type, int amount) throws SQLException {
-
-        try (Statement statement = database.getConnection().createStatement()) {
-            startTransaction.executeUpdate();
+        Connection connection = database.getConnection();
+        try (Statement statement = connection.createStatement()) {
+            connection.setAutoCommit(false);
 
             selectIdFromShops.setInt(1, row.x);
             selectIdFromShops.setInt(2, row.z);
@@ -467,7 +464,9 @@ public class ChestShopMonitor implements Listener {
             insertTransaction.setInt(4, amount);
             insertTransaction.executeUpdate();
 
-            commit.executeUpdate();
+            connection.commit();
+        } finally {
+            connection.setAutoCommit(false);
         }
         
     }
