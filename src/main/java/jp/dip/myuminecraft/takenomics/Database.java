@@ -24,7 +24,6 @@ public class Database {
     public boolean enable() {
         String configPrefix = "database";
         String configEnable = configPrefix + ".enable";
-        String configDebug = configPrefix + ".debug";
         String configHost = configPrefix + ".host";
         String configPort = configPrefix + ".port";
         String configDatabase = configPrefix + ".database";
