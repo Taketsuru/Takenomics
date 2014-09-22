@@ -4,6 +4,10 @@ import java.util.IllformedLocaleException;
 import java.util.Locale;
 
 import jp.dip.myuminecraft.takenomics.chestshop.ChestShopMonitor;
+import jp.dip.myuminecraft.takenomics.listeners.PlayerJoinQuitListener;
+import jp.dip.myuminecraft.takenomics.models.AccessLog;
+import jp.dip.myuminecraft.takenomics.models.PlayerTable;
+import jp.dip.myuminecraft.takenomics.models.WorldTable;
 import net.milkbowl.vault.economy.Economy;
 
 import org.bukkit.command.Command;
@@ -19,17 +23,19 @@ import com.sk89q.worldguard.bukkit.WorldGuardPlugin;
 
 public class Takenomics extends JavaPlugin implements Listener {
 
-    Logger                logger;
-    Messages              messages;
-    CommandDispatcher     commandDispatcher;
-    SignScanner           signScanner;
-    Database              database;
-    PlayerMonitor         playerMonitor;
-    TaxLogger             taxLogger;
-    Economy               economy;
-    WorldGuardPlugin      worldGuard;
-    TaxOnSavingsCollector taxOnSavingsCollector;
-    RedstoneTaxCollector  redstoneTaxCollector;
+    Logger                   logger;
+    Messages                 messages;
+    CommandDispatcher        commandDispatcher;
+    SignScanner              signScanner;
+    Database                 database;
+    PlayerTable              playerTable;
+    WorldTable               worldTable;
+    AccessLog                accessLog;
+    TaxLogger                taxLogger;
+    Economy                  economy;
+    WorldGuardPlugin         worldGuard;
+    TaxOnSavingsCollector    taxOnSavingsCollector;
+    RedstoneTaxCollector     redstoneTaxCollector;
     private ChestShopMonitor chestShopMonitor;
 
     @Override
@@ -58,18 +64,41 @@ public class Takenomics extends JavaPlugin implements Listener {
                 database = null;
             }
 
-            playerMonitor = null;
+            playerTable = null;
             if (database != null) {
-                playerMonitor = new PlayerMonitor(this, logger, database);
-                if (! playerMonitor.enable()) {
-                    logger.warning("Disable player and world list synchronization.");
-                    playerMonitor = null;
+                playerTable = new PlayerTable(this, logger, database);
+                if (! playerTable.enable()) {
+                    logger.warning("Disable player DB synchronization.");
+                    playerTable = null;
                 }
             }
 
+            worldTable = null;
+            if (database != null) {
+                worldTable = new WorldTable(this, logger, database);
+                if (! worldTable.enable()) {
+                    logger.warning("Disable world DB synchronization.");
+                    worldTable = null;
+                }
+            }
+
+            accessLog = null;
+            if (playerTable != null) {
+                accessLog = new AccessLog(this, logger, database, playerTable);
+                if (! accessLog.enable()) {
+                    logger.warning("Disable access log.");
+                    accessLog = null;
+                }
+            }
+            
+            if (accessLog != null) {
+                getServer().getPluginManager().registerEvents
+                (new PlayerJoinQuitListener(playerTable, accessLog), this);
+            }
+            
             chestShopMonitor = null;
-            if (playerMonitor != null) {
-                chestShopMonitor = new ChestShopMonitor(this, logger, database, playerMonitor);
+            if (playerTable != null) {
+                chestShopMonitor = new ChestShopMonitor(this, logger, database, playerTable, worldTable);
                 if (! chestShopMonitor.enable()) {
                     logger.warning("Disable ChestShop and MySQL connector.");
                     chestShopMonitor = null;

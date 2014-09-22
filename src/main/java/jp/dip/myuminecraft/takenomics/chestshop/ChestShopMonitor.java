@@ -6,18 +6,16 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Queue;
 
 import jp.dip.myuminecraft.takenomics.Constants;
 import jp.dip.myuminecraft.takenomics.Database;
-import jp.dip.myuminecraft.takenomics.JobQueue;
 import jp.dip.myuminecraft.takenomics.Logger;
-import jp.dip.myuminecraft.takenomics.PlayerMonitor;
 import jp.dip.myuminecraft.takenomics.SignScanEvent;
 import jp.dip.myuminecraft.takenomics.UnknownPlayerException;
+import jp.dip.myuminecraft.takenomics.models.PlayerTable;
+import jp.dip.myuminecraft.takenomics.models.WorldTable;
 
 import org.bukkit.Chunk;
 import org.bukkit.OfflinePlayer;
@@ -26,7 +24,6 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import com.Acrobot.Breeze.Utils.PriceUtil;
 import com.Acrobot.ChestShop.ChestShop;
@@ -55,7 +52,7 @@ public class ChestShopMonitor implements Listener {
             x = sign.getX();
             z = sign.getZ();
             y = sign.getY();
-            world = playerMonitor.getWorldId(sign.getWorld());
+            world = worldTable.getId(sign.getWorld());
 
             String nameOnSign = lines[ChestShopSign.NAME_LINE];
             String ownerName = nameOnSign.isEmpty()
@@ -75,7 +72,7 @@ public class ChestShopMonitor implements Listener {
                             sign.getY(), sign.getZ(), ownerName));
                 }
             }
-            owner = ownerPlayer == null ? 0 : playerMonitor.getPlayerId(ownerPlayer);
+            owner = ownerPlayer == null ? 0 : playerTable.getId(ownerPlayer);
             
             quantity = Integer.parseInt(lines[ChestShopSign.QUANTITY_LINE]);
             material = lines[ChestShopSign.ITEM_LINE];
@@ -89,7 +86,8 @@ public class ChestShopMonitor implements Listener {
     private JavaPlugin        plugin;
     private Logger            logger;
     private Database          database;
-    private PlayerMonitor     playerMonitor;
+    private PlayerTable       playerTable;
+    private WorldTable        worldTable;
     private PreparedStatement truncateTemporary;
     private PreparedStatement startTransaction;
     private PreparedStatement deleteObsoleteShops;
@@ -101,11 +99,12 @@ public class ChestShopMonitor implements Listener {
     private PreparedStatement insertShopReturnKey;
 
     public ChestShopMonitor(JavaPlugin plugin, Logger logger,
-            Database database, PlayerMonitor playerMonitor) {
+            Database database, PlayerTable playerMonitor, WorldTable worldTable) {
         this.plugin = plugin;
         this.logger = logger;
         this.database = database;
-        this.playerMonitor = playerMonitor;
+        this.playerTable = playerMonitor;
+        this.worldTable = worldTable;
     }
     
     public boolean enable() {
@@ -429,7 +428,7 @@ public class ChestShopMonitor implements Listener {
                     new ChestshopsRow(null, event.getSign(), event.getSign().getLines());
             final int amount = event.getStock()[0].getAmount();
             final TransactionType type = event.getTransactionType();
-            final int playerId = playerMonitor.getPlayerId(event.getClient());
+            final int playerId = playerTable.getId(event.getClient());
             database.runAsynchronously(new Runnable() {
                 public void run() {
                     try {
