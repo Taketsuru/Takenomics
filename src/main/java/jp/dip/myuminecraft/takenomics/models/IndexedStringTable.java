@@ -24,6 +24,7 @@ public class IndexedStringTable {
     String               nameType;
     Map<String, Integer> idTable = new HashMap<String, Integer>();
     PreparedStatement    insertEntry;
+    PreparedStatement    findEntry;
 
     public IndexedStringTable(JavaPlugin plugin, Logger logger, Database database,
             String tableName, String idType, String nameType) {
@@ -47,8 +48,8 @@ public class IndexedStringTable {
                         ("CREATE TABLE IF NOT EXISTS %s ("
                                 + "id %s UNSIGNED AUTO_INCREMENT NOT NULL,"
                                 + "name %s NOT NULL,"
-                                + "PRIMARY KEY (id)"
-                                + ")",
+                                + "PRIMARY KEY (id),"
+                                + "UNIQUE (name))",
                                 tableName, idType, nameType));
 
                 stmt.execute(String.format
@@ -89,6 +90,8 @@ public class IndexedStringTable {
                 stmt.execute(String.format("TRUNCATE TABLE %s_load", tableName));
             }
 
+            findEntry = connection.prepareStatement
+                    (String.format("SELECT id FROM %s WHERE name=?", tableName));
             insertEntry = connection.prepareStatement
                     (String.format("INSERT INTO %s VALUES (NULL,?)", tableName),
                             Statement.RETURN_GENERATED_KEYS);
@@ -103,6 +106,10 @@ public class IndexedStringTable {
     public void disable() {
         idTable.clear();
         try {
+            if (findEntry != null) {
+                findEntry.close();
+                findEntry = null;
+            }
             if (insertEntry != null) {
                 insertEntry.close();
                 insertEntry = null;
@@ -119,15 +126,25 @@ public class IndexedStringTable {
             return value;
         }
 
-        insertEntry.setString(1, key);
-        insertEntry.executeUpdate();
-
-        try (ResultSet result = insertEntry.getGeneratedKeys()) {
-            result.next();
-            int id = result.getInt(1);
-            idTable.put(key, id);
-            return id;
+        int id = 0;
+        findEntry.setString(1, key);
+        try (ResultSet result = findEntry.executeQuery()) {
+            if (result.next()) {
+                id = result.getInt(1);
+            }
         }
+
+        if (id < 1) {
+            insertEntry.setString(1, key);
+            insertEntry.executeUpdate();
+            try (ResultSet result = insertEntry.getGeneratedKeys()) {
+                result.next();
+                id = result.getInt(1);
+            }
+        }
+
+        idTable.put(key, id);
+        return id;
     }
 
     public synchronized void mayDropCache(String name) {
