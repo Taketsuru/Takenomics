@@ -40,7 +40,6 @@ public class JobQueue {
     }
     
     void processAsyncTasks() {
-        logger.info("processAsyncTasks: start");
         Runnable task;
         synchronized (this) {
             assert ! requests.isEmpty();
@@ -54,7 +53,6 @@ public class JobQueue {
                 requests.poll();
                 if (requests.isEmpty()) {
                     scheduledTask = null;
-                    logger.info("processAsyncTasks: stop");
                     return;
                 }
                 task = requests.peek();
