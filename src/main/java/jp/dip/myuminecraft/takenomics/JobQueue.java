@@ -9,11 +9,13 @@ import org.bukkit.scheduler.BukkitRunnable;
 public class JobQueue {
 
     JavaPlugin      plugin;
+    Logger          logger;
     Queue<Runnable> requests = new ArrayDeque<Runnable>();
     BukkitRunnable  scheduledTask;
 
-    public JobQueue(JavaPlugin plugin) {
+    public JobQueue(JavaPlugin plugin, Logger logger) {
         this.plugin = plugin;
+        this.logger = logger;
     }
 
     public synchronized void drain() {
@@ -38,6 +40,7 @@ public class JobQueue {
     }
     
     void processAsyncTasks() {
+        logger.info("processAsyncTasks: start");
         Runnable task;
         synchronized (this) {
             assert ! requests.isEmpty();
@@ -51,6 +54,7 @@ public class JobQueue {
                 requests.poll();
                 if (requests.isEmpty()) {
                     scheduledTask = null;
+                    logger.info("processAsyncTasks: stop");
                     return;
                 }
                 task = requests.peek();

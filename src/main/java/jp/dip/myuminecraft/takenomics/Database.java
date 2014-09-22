@@ -18,7 +18,7 @@ public class Database {
     public Database(JavaPlugin plugin, Logger logger) {
         this.plugin = plugin;
         this.logger = logger;
-        queue = new JobQueue(plugin);
+        queue = new JobQueue(plugin, logger);
     }
 
     public boolean enable() {

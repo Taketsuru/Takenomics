@@ -319,7 +319,7 @@ public class ChestShopMonitor implements Listener {
             logger.warning(e, "Failed to sync chestshop_shops table.");
         } finally {
             try {
-                connection.setAutoCommit(false);
+                connection.setAutoCommit(true);
             } catch (SQLException e) {
                 logger.warning(e, "Failed to disable autoCommit.");
             }
@@ -466,7 +466,7 @@ public class ChestShopMonitor implements Listener {
 
             connection.commit();
         } finally {
-            connection.setAutoCommit(false);
+            connection.setAutoCommit(true);
         }
         
     }
