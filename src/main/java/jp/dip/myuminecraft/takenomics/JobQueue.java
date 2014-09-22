@@ -28,11 +28,12 @@ public class JobQueue {
     public synchronized void runAsynchronously(Runnable runnable) {
         requests.add(runnable);
         if (scheduledTask == null) {
-            new BukkitRunnable() {
+            scheduledTask = new BukkitRunnable() {
                 public void run() {
                     processAsyncTasks();
                 }
-            }.runTaskAsynchronously(plugin);
+            };
+            scheduledTask.runTaskAsynchronously(plugin);
         }
     }
     
