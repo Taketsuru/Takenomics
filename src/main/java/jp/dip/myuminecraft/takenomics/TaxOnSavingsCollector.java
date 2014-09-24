@@ -53,7 +53,7 @@ public class TaxOnSavingsCollector extends PeriodicTaxCollector implements Liste
             public void run() {
                 for (OfflinePlayer player : plugin.getServer().getOfflinePlayers()) {
                     if (player.isOnline()
-                            || (table.getTaxExemptionLimit() <= economy.getBalance(player.getName()))) {
+                            || (table.getTaxExemptionLimit() <= economy.getBalance(player))) {
                         addPayer(player);
                     }
                 }                
@@ -74,7 +74,7 @@ public class TaxOnSavingsCollector extends PeriodicTaxCollector implements Liste
     }
 
     protected boolean collect(OfflinePlayer payer) {
-        double balance = economy.getBalance(payer.getName());
+        double balance = economy.getBalance(payer);
         double rate = table.getRate(balance);
 
         double tax;
@@ -89,7 +89,7 @@ public class TaxOnSavingsCollector extends PeriodicTaxCollector implements Liste
         tax = Math.floor(tax);
 
         if (0 < tax) {
-            EconomyResponse response = economy.withdrawPlayer(payer.getName(), tax);
+            EconomyResponse response = economy.withdrawPlayer(payer, tax);
             if (response.transactionSuccess()) {
                 if (payer.isOnline()) {
                     messages.send(payer.getPlayer(), "taxCollected", (long) tax);
@@ -106,7 +106,7 @@ public class TaxOnSavingsCollector extends PeriodicTaxCollector implements Liste
     
     @EventHandler
     void onPlayerJoin(PlayerJoinEvent event) {
-        addPayer(plugin.getServer().getOfflinePlayer(event.getPlayer().getName()));
+        addPayer(event.getPlayer());
     }
 
 }

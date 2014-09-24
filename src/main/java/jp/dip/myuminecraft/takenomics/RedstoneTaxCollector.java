@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import net.milkbowl.vault.economy.Economy;
 
@@ -137,8 +138,8 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
         }
 
         Server server = plugin.getServer();
-        for (String ownerName : gboResult.owners) {
-            OfflinePlayer owner = server.getOfflinePlayer(ownerName);
+        for (UUID ownerUUID : gboResult.owners) {
+            OfflinePlayer owner = server.getOfflinePlayer(ownerUUID);
             PayerInfo record = payersTable.get(owner);
             if (record == null) {
                 record = new PayerInfo();
@@ -148,7 +149,7 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
 
             if (record.arrears == 0.0) {
                 if (debug) {
-                    logger.info("monitor: owner: %s", ownerName);
+                    logger.info("monitor: owner: %s", owner.getName());
                 }
                 ++record.switching;
                 break;
@@ -157,10 +158,10 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
     }
     
     class GetBlockOwnersResult {
-        boolean     taxFree;
-        Set<String> owners;
+        boolean   taxFree;
+        Set<UUID> owners;
         
-        GetBlockOwnersResult(Set<String> owners, boolean taxFree) {
+        GetBlockOwnersResult(Set<UUID> owners, boolean taxFree) {
             this.owners = owners;
             this.taxFree = taxFree;
         }
@@ -182,10 +183,20 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
             logger.info("redstone: hit %s",
                     highest == null ? "<none>" : highest.getId());
         }
+        
+        if (highest == null) {
+            return null;
+        }
+        
+        Set<UUID> ownerSet = new HashSet<UUID>(highest.getOwners().getUniqueIds());
+        Server server = plugin.getServer();
+        for (String ownerName : highest.getOwners().getPlayers()) {
+            ownerSet.add(server.getOfflinePlayer(ownerName).getUniqueId());
+        }
 
         return highest == null
                 ? null
-                : new GetBlockOwnersResult(highest.getOwners().getPlayers(),
+                : new GetBlockOwnersResult(ownerSet,
                         taxFreeRegions.contains(highest.getId()));
     }
 
@@ -226,12 +237,12 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
                 paid = true;
             } else {
                 Server server = plugin.getServer();
-                for (String owner : gboResult.owners) {
-                    OfflinePlayer player = server.getOfflinePlayer(owner);
+                for (UUID uuid : gboResult.owners) {
+                    OfflinePlayer player = server.getOfflinePlayer(uuid);
                     PayerInfo record = payersTable.get(player);
                     if (record == null || record.arrears == 0.0) {
                         if (debug) {
-                            logger.info("redstone: owner: %s", owner);
+                            logger.info("redstone: owner: %s", player.getName());
                         }
                         paid = true;
                         break;
@@ -268,8 +279,7 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
             messages.send(onlinePlayer, "redstoneTaxNoticeTotal", tax);
         }
 
-        String playerName = payer.getName();
-        double balance = economy.getBalance(playerName);
+        double balance = economy.getBalance(payer);
         double paid = 0.0;
         if (balance <= 0.0) {
             paid = 0.0;
@@ -283,7 +293,7 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
         }
 
         if (0.0 < paid) {
-            economy.withdrawPlayer(playerName, paid);
+            economy.withdrawPlayer(payer, paid);
             if (onlinePlayer != null) {
                 messages.send(onlinePlayer, "redstoneTaxCollected", paid);
             }
