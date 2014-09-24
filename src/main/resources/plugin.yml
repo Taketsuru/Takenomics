@@ -1,6 +1,6 @@
 name: Takenomics
 main: jp.dip.myuminecraft.takenomics.Takenomics
-version: 0.0.3
+version: 0.0.4
 depend: [Vault, WorldGuard]
 softdepend: [ChestShop]
 commands:
