@@ -10,10 +10,21 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public class Database {
 
+    static final String configPrefix = "database";
+    static final String configEnable = configPrefix + ".enable";
+    static final String configDebug = configPrefix + ".debug";
+    static final String configHost = configPrefix + ".host";
+    static final String configPort = configPrefix + ".port";
+    static final String configDatabase = configPrefix + ".database";
+    static final String configUser = configPrefix + ".user";
+    static final String configPassword = configPrefix + ".password";
+    static final String configTablePrefix = configPrefix + ".tablePrefix";
     JavaPlugin plugin;
     Logger     logger;
     Connection connection;
     JobQueue   queue;
+    String     tablePrefix;
+    boolean    debug;
 
     public Database(JavaPlugin plugin, Logger logger) {
         this.plugin = plugin;
@@ -22,14 +33,6 @@ public class Database {
     }
 
     public boolean enable() {
-        String configPrefix = "database";
-        String configEnable = configPrefix + ".enable";
-        String configHost = configPrefix + ".host";
-        String configPort = configPrefix + ".port";
-        String configDatabase = configPrefix + ".database";
-        String configUser = configPrefix + ".user";
-        String configPassword = configPrefix + ".password";
-
         FileConfiguration config = plugin.getConfig();
         
         connection = null;
@@ -45,7 +48,16 @@ public class Database {
         if (! config.getBoolean(configEnable)) {
             return true;
         }
-        
+
+        if (! config.contains(configDebug) || ! config.contains(configDebug)) {
+            debug = false;
+        } else if (! config.isBoolean(configDebug)) {
+            logger.warning("'%s' is not a boolean.", configDebug);
+            debug = false;
+        } else {
+            debug = config.getBoolean(configDebug);
+        }
+
         if (! config.contains(configHost)) {
             logger.warning("'%s' is not configured.", configHost);
             return false;
@@ -65,6 +77,12 @@ public class Database {
         if (config.contains(configPassword)) {
             connectionProperties.put("password", config.getString(configPassword));
         }
+        
+        if (! config.contains(configTablePrefix)) {
+            tablePrefix = "takenomics_";
+        } else {
+            tablePrefix = config.getString(configTablePrefix);
+        }
 
         String host = config.getString(configHost);
         String port = config.contains(configPort)
@@ -73,10 +91,19 @@ public class Database {
         String database = config.getString(configDatabase);
         String url = String.format("jdbc:mysql://%s:%s/%s", host, port, database);
 
+        if (debug) {
+            logger.info("%s: '%s'", configHost, host);
+            logger.info("%s: '%s'", configPort, port);
+            logger.info("%s: '%s'", configDatabase, database);
+            logger.info("%s: '%s'", configUser, connectionProperties.get("user"));
+            logger.info("%s: '%s'", configPassword, connectionProperties.get("password"));
+            logger.info("%s: '%s'", configTablePrefix, tablePrefix);
+        }
+
         try {
             connection = DriverManager.getConnection(url, connectionProperties);
         } catch (SQLException e) {
-            logger.warning("Failed to connect to %s.  %s", url, e.getMessage());
+            logger.warning(e, "Failed to connect to %s.", url);
             return false;
         }
         
@@ -86,20 +113,22 @@ public class Database {
     public void disable() {
         queue.drain();
 
-        if (connection == null) {
-            return;
+        if (connection != null) {
+            try {
+                connection.close();
+            } catch (SQLException e) {
+                logger.warning(e, "Failed to close connection.");            
+            }
+            connection = null;
         }
-
-        try {
-            connection.close();
-        } catch (SQLException e) {
-            logger.warning(e, "Failed to close connection.");            
-        }
-        connection = null;
     }
     
     public Connection getConnection() {
         return connection;
+    }
+
+    public void runAsynchronously(Runnable runnable) {
+        queue.runAsynchronously(runnable);
     }
 
     public static String escapeSingleQuotes(String name) {
@@ -119,10 +148,6 @@ public class Database {
         result.append(name.substring(from));
         
         return result.toString();
-    }
-
-    public void runAsynchronously(Runnable runnable) {
-        queue.runAsynchronously(runnable);
     }
 
 }
