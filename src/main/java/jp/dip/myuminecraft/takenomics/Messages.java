@@ -2,6 +2,7 @@ package jp.dip.myuminecraft.takenomics;
 
 import java.io.UnsupportedEncodingException;
 import java.util.Locale;
+import java.util.MissingResourceException;
 import java.util.ResourceBundle;
 
 import org.bukkit.command.CommandSender;
@@ -19,6 +20,8 @@ public class Messages {
     public String getString(String key) {
         try {
             return new String(bundle.getString(key).getBytes("ISO-8859-1"), "UTF-8");
+        } catch (MissingResourceException mre) {
+            return key;
         } catch (UnsupportedEncodingException e) {
             throw new Error(e);
         }
