@@ -28,13 +28,13 @@ public class CommandDispatcher implements CommandExecutor {
     public CommandDispatcher(Messages messages, String permissionPrefix) {
         this.messages = messages;
         this.commandPosition = 0;
-        this.permissionPrefix = permissionPrefix;
+        this.permissionPrefix = permissionPrefix.toLowerCase();
     }
     
     public CommandDispatcher(CommandDispatcher parent, String subcommand) {
         this.messages = parent.messages;
         this.commandPosition = parent.commandPosition + 1;
-        this.permissionPrefix = parent.permissionPrefix + subcommand + ".";
+        this.permissionPrefix = parent.permissionPrefix + subcommand.toLowerCase() + ".";
         parent.addCommand(subcommand, this);
     }
     
@@ -70,7 +70,6 @@ public class CommandDispatcher implements CommandExecutor {
 
         if (! sender.isOp() && sender instanceof Player
                 && ! ((Player)sender).hasPermission(info.permission)) {
-
             String cmdStr = getCommandString(cmd, args);
             messages.send((Player)sender, "noPermissionToRunCommand", cmdStr);
 

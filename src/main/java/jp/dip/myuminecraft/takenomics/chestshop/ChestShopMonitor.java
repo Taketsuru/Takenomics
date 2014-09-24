@@ -8,6 +8,7 @@ import java.sql.Statement;
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import jp.dip.myuminecraft.takenomics.Constants;
 import jp.dip.myuminecraft.takenomics.Database;
@@ -32,7 +33,7 @@ import com.Acrobot.ChestShop.Events.ShopDestroyedEvent;
 import com.Acrobot.ChestShop.Events.TransactionEvent;
 import com.Acrobot.ChestShop.Events.TransactionEvent.TransactionType;
 import com.Acrobot.ChestShop.Signs.ChestShopSign;
-import com.Acrobot.ChestShop.Utils.uName;
+import com.Acrobot.ChestShop.UUIDs.NameManager;
 
 public class ChestShopMonitor implements Listener {
 
@@ -54,16 +55,14 @@ public class ChestShopMonitor implements Listener {
             y = sign.getY();
             world = worldTable.getId(sign.getWorld());
 
-            String nameOnSign = lines[ChestShopSign.NAME_LINE];
-            String ownerName = nameOnSign.isEmpty()
-                    ? player.getName()
-                    : uName.getName(nameOnSign);
-
             OfflinePlayer ownerPlayer;
-            if (ChestShopSign.isAdminShop(ownerName)) {
+            if (ChestShopSign.isAdminShop(sign)) {
                 ownerPlayer = null;
             } else {
-                ownerPlayer = plugin.getServer().getOfflinePlayer(ownerName);
+                String nameOnSign = lines[ChestShopSign.NAME_LINE];
+                String ownerName = NameManager.getFullUsername(nameOnSign);
+                UUID ownerUUID = NameManager.getUUID(ownerName);
+                ownerPlayer = plugin.getServer().getOfflinePlayer(ownerUUID);
                 if (ownerPlayer == null) {
                     throw new UnknownPlayerException
                     (String.format("ChestShop at %s:%d,%d,%d"
