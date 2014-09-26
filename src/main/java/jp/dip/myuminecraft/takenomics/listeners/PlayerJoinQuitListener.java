@@ -2,6 +2,7 @@ package jp.dip.myuminecraft.takenomics.listeners;
 
 import java.sql.SQLException;
 
+import jp.dip.myuminecraft.takenomics.Logger;
 import jp.dip.myuminecraft.takenomics.models.AccessLog;
 import jp.dip.myuminecraft.takenomics.models.PlayerTable;
 
@@ -14,10 +15,12 @@ import org.bukkit.event.player.PlayerQuitEvent;
 
 public class PlayerJoinQuitListener implements Listener {
 
+    Logger      logger;
     PlayerTable playerTable;
-    AccessLog accessLog;
+    AccessLog   accessLog;
     
-    public PlayerJoinQuitListener(PlayerTable playerTable, AccessLog accessLog) {
+    public PlayerJoinQuitListener(Logger logger, PlayerTable playerTable, AccessLog accessLog) {
+        this.logger = logger;
         this.playerTable = playerTable;
         this.accessLog = accessLog;
     }
@@ -25,21 +28,23 @@ public class PlayerJoinQuitListener implements Listener {
     @EventHandler
     public void onAsyncPlayerPreLogin(AsyncPlayerPreLoginEvent event) {
         try {
-            // To prevent slow down of synchronous code, we prefetch the id from DB here.
-            playerTable.getId(event.getName());
+            playerTable.enter(event.getUniqueId(), event.getName());
         } catch (SQLException e) {
+            logger.warning(e, "Failed to enter a record into table `players`.");
         }
     }
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
-        accessLog.put(event.getPlayer(), AccessLog.EntryType.JOIN);
+        if (accessLog != null) {
+            accessLog.put(event.getPlayer(), AccessLog.EntryType.JOIN);
+        }
     }
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        Player player = event.getPlayer();
-        accessLog.put(player, AccessLog.EntryType.QUIT);
-        playerTable.mayDropCache(player);
+        if (accessLog != null) {
+            accessLog.put(event.getPlayer(), AccessLog.EntryType.QUIT);
+        }
     }
 }

@@ -4,27 +4,29 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Properties;
+import java.util.UUID;
 
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class Database {
 
-    static final String configPrefix = "database";
-    static final String configEnable = configPrefix + ".enable";
-    static final String configDebug = configPrefix + ".debug";
-    static final String configHost = configPrefix + ".host";
-    static final String configPort = configPrefix + ".port";
-    static final String configDatabase = configPrefix + ".database";
-    static final String configUser = configPrefix + ".user";
-    static final String configPassword = configPrefix + ".password";
+    static final String configPrefix      = "database";
+    static final String configEnable      = configPrefix + ".enable";
+    static final String configDebug       = configPrefix + ".debug";
+    static final String configHost        = configPrefix + ".host";
+    static final String configPort        = configPrefix + ".port";
+    static final String configDatabase    = configPrefix + ".database";
+    static final String configUser        = configPrefix + ".user";
+    static final String configPassword    = configPrefix + ".password";
     static final String configTablePrefix = configPrefix + ".tablePrefix";
-    JavaPlugin plugin;
-    Logger     logger;
-    Connection connection;
-    JobQueue   queue;
-    String     tablePrefix;
-    boolean    debug;
+    JavaPlugin          plugin;
+    Logger              logger;
+    Connection          connection;
+    JobQueue            queue;
+    String              database;
+    String              tablePrefix;
+    boolean             debug;
 
     public Database(JavaPlugin plugin, Logger logger) {
         this.plugin = plugin;
@@ -88,7 +90,7 @@ public class Database {
         String port = config.contains(configPort)
                 ? config.getString(configPort)
                 : "3306";
-        String database = config.getString(configDatabase);
+        database = config.getString(configDatabase);
         String url = String.format("jdbc:mysql://%s:%s/%s", host, port, database);
 
         if (debug) {
@@ -121,14 +123,44 @@ public class Database {
             }
             connection = null;
         }
+        
+        database = null;
+        tablePrefix = null;
     }
-    
+
+    public String getTablePrefix() {
+        return tablePrefix;
+    }
+
+    public String getDatabaseName() {
+        return database;
+    }
+
     public Connection getConnection() {
         return connection;
     }
-
+    
     public void runAsynchronously(Runnable runnable) {
         queue.runAsynchronously(runnable);
+    }
+
+    public static void toBytes(UUID uuid, byte[] result) {
+        long high = uuid.getMostSignificantBits();
+        long low  = uuid.getLeastSignificantBits();
+        for (int i = 0; i < 8; ++i) {
+            result[i] = (byte)(high >>> (64 - i * 8));
+            result[i + 8] = (byte)(low >>> (64 - i * 8));
+        }
+    }
+
+    public static UUID toUUID(byte[] uuidBytes) {
+        long high = 0;
+        long low  = 0;
+        for (int i = 0; i < 8; ++i) {
+            high |= ((long)uuidBytes[i] << (64 - i * 8));
+            low |= ((long)uuidBytes[i + 8] << (64 - i * 8));
+        }
+        return new UUID(high, low);
     }
 
     public static String escapeSingleQuotes(String name) {

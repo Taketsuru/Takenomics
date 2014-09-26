@@ -64,36 +64,24 @@ public class Takenomics extends JavaPlugin implements Listener {
                 database = null;
             }
 
-            playerTable = null;
-            if (database != null) {
-                playerTable = new PlayerTable(this, logger, database);
-                if (! playerTable.enable()) {
-                    logger.warning("Disable player DB synchronization.");
-                    playerTable = null;
-                }
+            playerTable = new PlayerTable(this, logger, database);
+            if (! playerTable.enable()) {
+                playerTable = null;
+            }
+ 
+            worldTable = new WorldTable(this, logger, database);
+            if (! worldTable.enable()) {
+                worldTable = null;
             }
 
-            worldTable = null;
-            if (database != null) {
-                worldTable = new WorldTable(this, logger, database);
-                if (! worldTable.enable()) {
-                    logger.warning("Disable world DB synchronization.");
-                    worldTable = null;
-                }
-            }
-
-            accessLog = null;
-            if (playerTable != null) {
-                accessLog = new AccessLog(this, logger, database, playerTable);
-                if (! accessLog.enable()) {
-                    logger.warning("Disable access log.");
-                    accessLog = null;
-                }
+            accessLog = new AccessLog(this, logger, database, playerTable);
+            if (! accessLog.enable()) {
+                accessLog = null;
             }
             
             if (accessLog != null) {
                 getServer().getPluginManager().registerEvents
-                (new PlayerJoinQuitListener(playerTable, accessLog), this);
+                (new PlayerJoinQuitListener(logger, playerTable, accessLog), this);
             }
             
             chestShopMonitor = null;

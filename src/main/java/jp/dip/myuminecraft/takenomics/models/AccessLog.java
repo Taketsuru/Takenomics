@@ -6,6 +6,8 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 
+import java.util.UUID;
+
 import jp.dip.myuminecraft.takenomics.Database;
 import jp.dip.myuminecraft.takenomics.Logger;
 
@@ -22,6 +24,7 @@ public class AccessLog {
     JavaPlugin        plugin;
     Logger            logger;
     Database          database;
+    String            tableName;
     PlayerTable       playerTable;
     PreparedStatement insertEntry;
 
@@ -34,23 +37,29 @@ public class AccessLog {
     }
 
     public boolean enable() {
+        if (database == null || playerTable == null) {
+            return false;
+        }
+
         Connection connection = database.getConnection();
+        tableName = database.getTablePrefix() + "accesses";
 
         try {
             try (Statement statement = connection.createStatement()) {
-                statement.execute("CREATE TABLE IF NOT EXISTS accesses ("
+                statement.execute(String.format
+                        ("CREATE TABLE IF NOT EXISTS %s ("
                         + "id INT UNSIGNED AUTO_INCREMENT NOT NULL,"
                         + "timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,"
                         + "player MEDIUMINT UNSIGNED NOT NULL,"
                         + "activity ENUM('join', 'quit') NOT NULL,"
                         + "PRIMARY KEY (id),"
                         + "INDEX (timestamp),"
-                        + "FOREIGN KEY (player) REFERENCES players(id) ON DELETE CASCADE"
-                        + ")");
+                        + "FOREIGN KEY (player) REFERENCES %s(id) ON DELETE CASCADE"
+                        + ")", tableName, playerTable.getTableName()));
             }
 
             insertEntry = connection.prepareStatement
-                    ("INSERT INTO accesses VALUES (NULL, NULL, ?, ?)");
+                    (String.format("INSERT INTO %s VALUES (NULL, NULL, ?, ?)", tableName));
         } catch (SQLException e) {
             logger.warning(e, "Failed to initialize access log.");
             disable();
@@ -72,23 +81,19 @@ public class AccessLog {
     }
 
     public void put(Player player, final EntryType type) {
-        try {
-            final int id = playerTable.getId(player);
+        final UUID uuid = player.getUniqueId();
 
-            database.runAsynchronously(new Runnable() {
-                public void run() {
-                    try {
-                        insertEntry.setInt(1, id);
-                        insertEntry.setString(2, type.toString().toLowerCase());
-                        insertEntry.executeUpdate();
-                    } catch (SQLException e) {
-                        logger.warning(e, "Failed to put access log entry.");
-                    }
+        database.runAsynchronously(new Runnable() {
+            public void run() {
+                try {
+                    insertEntry.setInt(1, playerTable.getId(uuid));
+                    insertEntry.setString(2, type.toString().toLowerCase());
+                    insertEntry.executeUpdate();
+                } catch (SQLException e) {
+                    logger.warning(e, "Failed to put access log entry.");
                 }
-            });
-        } catch (SQLException e) {
-            logger.warning(e, "Failed to put access log entry.");
-        }
+            }
+        });
     }
 
 }

@@ -41,8 +41,8 @@ public class ChestShopMonitor implements Listener {
         int x;
         int z;
         int y;
-        int world;
-        String owner;
+        String world;
+        UUID owner;
         int quantity;
         String material;
         double buyPrice;
@@ -53,25 +53,15 @@ public class ChestShopMonitor implements Listener {
             x = sign.getX();
             z = sign.getZ();
             y = sign.getY();
-            world = worldTable.getId(sign.getWorld());
+            world = sign.getWorld().getName();
 
-            OfflinePlayer ownerPlayer;
             if (ChestShopSign.isAdminShop(sign)) {
-                ownerPlayer = null;
+                owner = null;
             } else {
                 String nameOnSign = lines[ChestShopSign.NAME_LINE];
                 String ownerName = NameManager.getFullUsername(nameOnSign);
-                UUID ownerUUID = NameManager.getUUID(ownerName);
-                ownerPlayer = plugin.getServer().getOfflinePlayer(ownerUUID);
-                if (ownerPlayer == null) {
-                    throw new UnknownPlayerException
-                    (String.format("ChestShop at %s:%d,%d,%d"
-                            + " is owned by an unknown user '%s'.",
-                            sign.getWorld().getName(), sign.getX(),
-                            sign.getY(), sign.getZ(), ownerName));
-                }
+                owner = NameManager.getUUID(ownerName);
             }
-            owner = ownerPlayer == null ? null : ownerPlayer.getName();
             
             quantity = Integer.parseInt(lines[ChestShopSign.QUANTITY_LINE]);
             material = lines[ChestShopSign.ITEM_LINE];
@@ -87,6 +77,9 @@ public class ChestShopMonitor implements Listener {
     private Database          database;
     private PlayerTable       playerTable;
     private WorldTable        worldTable;
+    String shopTableName;
+    String transactionTableName;
+    String temporaryShopTableName;
     private PreparedStatement truncateTemporary;
     private PreparedStatement deleteObsoleteShops;
     private PreparedStatement insertNewShops;
@@ -111,6 +104,11 @@ public class ChestShopMonitor implements Listener {
             return false;
         }
 
+        String tablePrefix = database.getTablePrefix() + "chestshop_";
+        shopTableName = tablePrefix + "shops";
+        transactionTableName = tablePrefix + "transactions";
+        temporaryShopTableName = tablePrefix + "scanned_shops";
+
         try {
             createTables();
             prepareStatements();
@@ -129,7 +127,8 @@ public class ChestShopMonitor implements Listener {
         Connection connection = database.getConnection();
 
         Statement statement = connection.createStatement();
-        statement.execute("CREATE TABLE IF NOT EXISTS chestshop_shops ("
+        statement.execute(String.format
+                ("CREATE TABLE IF NOT EXISTS %s ("
                 + "id SMALLINT UNSIGNED AUTO_INCREMENT NOT NULL,"
                 + "x SMALLINT NOT NULL,"
                 + "z SMALLINT NOT NULL,"
@@ -143,10 +142,11 @@ public class ChestShopMonitor implements Listener {
                 + "PRIMARY KEY (id),"
                 + "UNIQUE (x,z,y,world),"
                 + "INDEX (owner),"
-                + "FOREIGN KEY (world) REFERENCES worlds (id) ON DELETE CASCADE,"
-                + "FOREIGN KEY (owner) REFERENCES players (id) ON DELETE CASCADE"
-                + ")");
-        statement.execute("CREATE TABLE IF NOT EXISTS chestshop_transactions ("
+                + "FOREIGN KEY (world) REFERENCES %s (id) ON DELETE CASCADE,"
+                + "FOREIGN KEY (owner) REFERENCES %s (id) ON DELETE CASCADE"
+                + ")",
+                shopTableName, worldTable.getTableName(), playerTable.getTableName()));
+        statement.execute(String.format("CREATE TABLE IF NOT EXISTS %s ("
                 + "id INT UNSIGNED AUTO_INCREMENT NOT NULL,"
                 + "timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,"
                 + "shop SMALLINT UNSIGNED NOT NULL,"
@@ -154,10 +154,11 @@ public class ChestShopMonitor implements Listener {
                 + "type ENUM('buy', 'sell') NOT NULL,"
                 + "quantity SMALLINT NOT NULL,"
                 + "PRIMARY KEY (id),"
-                + "FOREIGN KEY (shop) REFERENCES chestshop_shops (id) ON DELETE CASCADE,"
-                + "FOREIGN KEY (player) REFERENCES players (id) ON DELETE CASCADE"
-                + ")");
-        statement.execute("CREATE TEMPORARY TABLE IF NOT EXISTS chestshop_scanned_shops ("
+                + "FOREIGN KEY (shop) REFERENCES %s (id) ON DELETE CASCADE,"
+                + "FOREIGN KEY (player) REFERENCES %s (id) ON DELETE CASCADE"
+                + ")",
+                transactionTableName, shopTableName, playerTable.getTableName()));
+        statement.execute(String.format("CREATE TEMPORARY TABLE IF NOT EXISTS %s ("
                 + "x SMALLINT NOT NULL,"
                 + "z SMALLINT NOT NULL,"
                 + "y SMALLINT NOT NULL,"
@@ -168,53 +169,63 @@ public class ChestShopMonitor implements Listener {
                 + "buy_price DOUBLE,"
                 + "sell_price DOUBLE,"
                 + "UNIQUE (x,z,y,world)"
-                + ") ENGINE=MEMORY");
+                + ") ENGINE=MEMORY",
+                temporaryShopTableName));
     }
     
     void prepareStatements() throws SQLException {
         Connection connection = database.getConnection();
 
-        truncateTemporary = connection.prepareStatement("TRUNCATE chestshop_scanned_shops");
-        deleteObsoleteShops = connection.prepareStatement("DELETE FROM chestshop_shops "
-                + "USING chestshop_shops LEFT JOIN chestshop_scanned_shops "
-                + "ON chestshop_shops.x = chestshop_scanned_shops.x "
-                + "AND chestshop_shops.z = chestshop_scanned_shops.z "
-                + "AND chestshop_shops.y = chestshop_scanned_shops.y "
-                + "AND chestshop_shops.world = chestshop_scanned_shops.world "
-                + "WHERE ? <= chestshop_shops.x AND chestshop_shops.x < ? "
-                + "AND ? <= chestshop_shops.z AND chestshop_shops.z < ? "
-                + "AND (chestshop_scanned_shops.x IS NULL "
-                + "OR ! chestshop_shops.owner <=> chestshop_scanned_shops.owner "
-                + "OR chestshop_shops.quantity != chestshop_scanned_shops.quantity "
-                + "OR chestshop_shops.material != chestshop_scanned_shops.material "
-                + "OR chestshop_shops.buy_price != chestshop_scanned_shops.buy_price "
-                + "OR chestshop_shops.sell_price != chestshop_scanned_shops.sell_price)");
-        insertNewShops = connection.prepareStatement("INSERT INTO chestshop_shops "
-                + "SELECT NULL,"
-                + "chestshop_scanned_shops.x,"
-                + "chestshop_scanned_shops.z,"
-                + "chestshop_scanned_shops.y,"
-                + "chestshop_scanned_shops.world,"
-                + "chestshop_scanned_shops.owner,"
-                + "chestshop_scanned_shops.quantity,"
-                + "chestshop_scanned_shops.material,"
-                + "chestshop_scanned_shops.buy_price,"
-                + "chestshop_scanned_shops.sell_price "
-                + "FROM chestshop_scanned_shops LEFT JOIN chestshop_shops "
-                + "ON chestshop_shops.x = chestshop_scanned_shops.x "
-                + "AND chestshop_shops.z = chestshop_scanned_shops.z "
-                + "AND chestshop_shops.y = chestshop_scanned_shops.y "
-                + "AND chestshop_shops.world = chestshop_scanned_shops.world "
-                + "WHERE chestshop_shops.id IS NULL");
+        truncateTemporary = connection.prepareStatement
+                (String.format("TRUNCATE %s", temporaryShopTableName));
+        deleteObsoleteShops = connection.prepareStatement
+                (String.format("DELETE FROM %1$s "
+                                + "USING %1$s LEFT JOIN %2$s "
+                                + "ON %1$s.x = %2$s.x "
+                                + "AND %1$s.z = %2$s.z "
+                                + "AND %1$s.y = %2$s.y "
+                                + "AND %1$s.world = %2$s.world "
+                                + "WHERE ? <= %1$s.x AND %1$s.x < ? "
+                                + "AND ? <= %1$s.z AND %1$s.z < ? "
+                                + "AND (%2$s.x IS NULL "
+                                + "OR ! %1$s.owner <=> %2$s.owner "
+                                + "OR %1$s.quantity != %2$s.quantity "
+                                + "OR %1$s.material != %2$s.material "
+                                + "OR %1$s.buy_price != %2$s.buy_price "
+                                + "OR %1$s.sell_price != %2$s.sell_price)",
+                                shopTableName, temporaryShopTableName));
+        insertNewShops = connection.prepareStatement
+                (String.format("INSERT INTO %1$s "
+                                + "SELECT NULL,"
+                                + "%2$s.x,"
+                                + "%2$s.z,"
+                                + "%2$s.y,"
+                                + "%2$s.world,"
+                                + "%2$s.owner,"
+                                + "%2$s.quantity,"
+                                + "%2$s.material,"
+                                + "%2$s.buy_price,"
+                                + "%2$s.sell_price "
+                                + "FROM %2$s LEFT JOIN %1$s "
+                                + "ON %1$s.x = %2$s.x "
+                                + "AND %1$s.z = %2$s.z "
+                                + "AND %1$s.y = %2$s.y "
+                                + "AND %1$s.world = %2$s.world "
+                                + "WHERE %1$s.id IS NULL",
+                                shopTableName, temporaryShopTableName));
         insertShop = connection.prepareStatement
-                ("INSERT INTO chestshop_shops VALUES (NULL,?,?,?,?,?,?,?,?,?)");
+                (String.format("INSERT INTO %s VALUES (NULL,?,?,?,?,?,?,?,?,?)",
+                        shopTableName));
         insertShopReturnKey = connection.prepareStatement
-                ("INSERT INTO chestshop_shops VALUES (NULL,?,?,?,?,?,?,?,?,?)",
+                (String.format("INSERT INTO %s VALUES (NULL,?,?,?,?,?,?,?,?,?)",
+                        shopTableName),
                   Statement.RETURN_GENERATED_KEYS);
         selectIdFromShops = connection.prepareStatement
-                ("SELECT id FROM chestshop_shops WHERE x=? AND z=? AND y=? AND world=?");
+                (String.format("SELECT id FROM %s WHERE x=? AND z=? AND y=? AND world=?",
+                        shopTableName));
         insertTransaction = connection.prepareStatement
-                ("INSERT INTO chestshop_transactions VALUES (NULL,NULL,?,?,?,?)");
+                (String.format("INSERT INTO %s VALUES (NULL,NULL,?,?,?,?)",
+                        transactionTableName));
     }
 
     public void disable() {
@@ -280,8 +291,8 @@ public class ChestShopMonitor implements Listener {
         Connection connection = database.getConnection();
 
         try (Statement statement = connection.createStatement()) {
-            StringBuilder insert =
-                    new StringBuilder("INSERT INTO chestshop_scanned_shops VALUES ");
+            StringBuilder insert = new StringBuilder(String.format
+                    ("INSERT INTO %s VALUES ", temporaryShopTableName));
             boolean first = true;
             for (ChestshopsRow row : scannedSigns) {
                 if (! first) {
@@ -289,9 +300,10 @@ public class ChestShopMonitor implements Listener {
                 } else {
                     first = false;
                 }
+                int worldId = worldTable.getId(row.world);
                 
                 insert.append(String.format("(%d,%d,%d,%d",
-                        row.x, row.z, row.y, row.world));
+                        row.x, row.z, row.y, worldId));
                 insert.append(row.owner != null
                         ? String.format(",%d", playerTable.getId(row.owner))
                         : ",NULL");
@@ -315,7 +327,7 @@ public class ChestShopMonitor implements Listener {
 
             connection.commit();
         } catch (SQLException e) {
-            logger.warning(e, "Failed to sync chestshop_shops table.");
+            logger.warning(e, "Failed to enter an entry into ChestShop shops table.");
         } finally {
             try {
                 connection.setAutoCommit(true);
@@ -343,7 +355,7 @@ public class ChestShopMonitor implements Listener {
                     try {
                         insertIntoShops(row);
                     } catch (SQLException e) {
-                        logger.warning(e, "Failed to enter shop record.");
+                        logger.warning(e, "Failed to enter a shop record.");
                     }
                 }
             });
@@ -356,7 +368,7 @@ public class ChestShopMonitor implements Listener {
         stmt.setInt(1, row.x);
         stmt.setInt(2, row.z);
         stmt.setInt(3, row.y);
-        stmt.setInt(4, row.world);
+        stmt.setInt(4, worldTable.getId(row.world));
         stmt.setInt(5, playerTable.getId(row.owner));
         stmt.setInt(6, row.quantity);
         stmt.setString(7, row.material);
@@ -407,12 +419,12 @@ public class ChestShopMonitor implements Listener {
 
     void deleteFromShops(ChestshopsRow row) throws SQLException {
         try (Statement statement = database.getConnection().createStatement()) {
-            String stmt = String.format("DELETE FROM chestshop_shops WHERE "
+            String stmt = String.format("DELETE FROM %s WHERE "
                     + "x = %d "
                     + "AND z = %d "
                     + "AND y = %d "
                     + "AND world = %d",
-                    row.x, row.z, row.y, row.world);
+                    shopTableName, row.x, row.z, row.y, row.world);
             statement.executeUpdate(stmt);
         }
     }
@@ -424,7 +436,7 @@ public class ChestShopMonitor implements Listener {
                     new ChestshopsRow(null, event.getSign(), event.getSign().getLines());
             final int amount = event.getStock()[0].getAmount();
             final TransactionType type = event.getTransactionType();
-            final int playerId = playerTable.getId(event.getClient());
+            final int playerId = playerTable.getId(event.getClient().getUniqueId());
             database.runAsynchronously(new Runnable() {
                 public void run() {
                     try {
@@ -448,7 +460,7 @@ public class ChestShopMonitor implements Listener {
             selectIdFromShops.setInt(1, row.x);
             selectIdFromShops.setInt(2, row.z);
             selectIdFromShops.setInt(3, row.y);
-            selectIdFromShops.setInt(4, row.world);
+            selectIdFromShops.setInt(4, worldTable.getId(row.world));
             
             int shopId;
             try (ResultSet resultSet = selectIdFromShops.executeQuery()) {            

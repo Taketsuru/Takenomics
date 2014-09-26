@@ -12,4 +12,6 @@ public class Constants {
     public static final int chunksPerRegion    = regionXSize * regionZSize;
     public static final int chunkLocationsSize = sizeOfInt * chunksPerRegion;
     public static final int maxChunkSize       = 1024 * 1024;
+    
+    public static final int sizeOfUUID = 16;
 }
