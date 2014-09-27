@@ -167,6 +167,7 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
         }
     }
 
+    @SuppressWarnings("deprecation")
     GetBlockOwnersResult getBlockOwners(Location loc) {
         ProtectedRegion highest = null;
         int currentPriority = Integer.MIN_VALUE;
@@ -188,7 +189,8 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
             return null;
         }
         
-        Set<UUID> ownerSet = new HashSet<UUID>(highest.getOwners().getUniqueIds());
+        //Set<UUID> ownerSet = new HashSet<UUID>(highest.getOwners().getUniqueIds());
+        Set<UUID> ownerSet = new HashSet<UUID>();
         Server server = plugin.getServer();
         for (String ownerName : highest.getOwners().getPlayers()) {
             ownerSet.add(server.getOfflinePlayer(ownerName).getUniqueId());
