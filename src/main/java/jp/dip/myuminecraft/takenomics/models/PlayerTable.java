@@ -14,15 +14,18 @@ import jp.dip.myuminecraft.takenomics.Database;
 import jp.dip.myuminecraft.takenomics.Logger;
 
 import org.bukkit.OfflinePlayer;
+import org.bukkit.Server;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class PlayerTable {
 
+    static final int   currentSchemaVersion = 1;
+    static final int   maxBatchSize         = 1000;
     JavaPlugin         plugin;
     Logger             logger;
     Database           database;
     String             tableName;
-    Map<UUID, Integer> cache = new HashMap<UUID, Integer>();
+    Map<UUID, Integer> cache                = new HashMap<UUID, Integer>();
     PreparedStatement  insertEntry;
     PreparedStatement  findEntry;
     PreparedStatement  updateName;
@@ -43,19 +46,28 @@ public class PlayerTable {
             return false;
         }
 
+        Connection connection = database.getConnection();            
+
         tableName = database.getTablePrefix() + "players";
 
-        Connection connection = database.getConnection();            
         try {
-            try (PreparedStatement checkTable = connection.prepareStatement
-                    ("SELECT table_name FROM information_schema.tables "
-                            + "WHERE table_schema = ? AND table_name = ?")) {
-                checkTable.setString(1, database.getDatabaseName());
-                checkTable.setString(2, tableName);
-                try (ResultSet rs = checkTable.executeQuery()) {
-                    if (! rs.next()) {
-                        createTable();
+            if (! database.hasTable(tableName)) {
+                createEmptyTable(tableName);
+                database.setVersion(tableName, currentSchemaVersion);
+                importFromOfflinePlayerList();
+            } else {
+                int version = database.getVersion(tableName);
+                if (version < currentSchemaVersion) {
+                    if (! upgradeTable(version)) {
+                        disable();
+                        return false;
                     }
+                } else if (currentSchemaVersion < version) {
+                    logger.warning("The schema version of %s is higher (%d) "
+                            + "than the current version (%d).",
+                            tableName, version, currentSchemaVersion);
+                    disable();
+                    return false;
                 }
             }
 
@@ -70,7 +82,7 @@ public class PlayerTable {
                     (String.format("UPDATE %s SET name=NULL WHERE uuid != ? AND name = ?",
                             tableName));
         } catch (SQLException e) {
-            logger.warning(e, "Failed to initialize PlayerTable.");
+            logger.warning(e, "Failed to initialize %s.", tableName);
             disable();
             return false;
         }
@@ -78,55 +90,112 @@ public class PlayerTable {
         return true;
     }
 
-    private void createTable() throws SQLException {
-        String uuidType = "BINARY(16) NOT NULL";
-        String nameType = "VARCHAR(16) CHARACTER SET ascii";
-
+    void importFromOfflinePlayerList() throws SQLException {
         Connection connection = database.getConnection();
+        try (PreparedStatement insert =
+                connection.prepareStatement
+                (String.format("INSERT INTO %s VALUES (NULL,?,?)", tableName))) {
+            byte[] uuid = new byte[Constants.sizeOfUUID];
+            int batchCount = 0;
+            for (OfflinePlayer player : plugin.getServer().getOfflinePlayers()) {
+                Database.toBytes(player.getUniqueId(), uuid);
+                insert.setBytes(1, uuid);
+                insert.setString(2, player.getName());
+                insert.addBatch();
+                if (maxBatchSize < ++batchCount) {
+                    insert.executeBatch();
+                    batchCount = 0;
+                }
+            }
+            insert.executeBatch();
+        }
+    }
 
-        try (Statement stmt = connection.createStatement()) {
+    void createEmptyTable(String newTableName) throws SQLException {
+        try (Statement stmt = database.getConnection().createStatement()) {
             stmt.execute(String.format
                     ("CREATE TABLE %s ("
                             + "id MEDIUMINT UNSIGNED AUTO_INCREMENT NOT NULL,"
-                            + "uuid %s,"
-                            + "name %s,"
+                            + "uuid BINARY(16) NOT NULL,"
+                            + "name VARCHAR(16) CHARACTER SET ascii,"
                             + "PRIMARY KEY (id),"
                             + "UNIQUE (uuid),"
                             + "UNIQUE (name))",
-                            tableName, uuidType, nameType));
+                            newTableName));
+        }
+    }
 
-            try (PreparedStatement insert =
-                    connection.prepareStatement
-                    (String.format("INSERT INTO %s VALUES (NULL,?,?)", tableName))) {
-                byte[] uuid = new byte[Constants.sizeOfUUID];
-                for (OfflinePlayer player : plugin.getServer().getOfflinePlayers()) {
-                    Database.toBytes(player.getUniqueId(), uuid);
-                    insert.setBytes(1, uuid);
-                    insert.setString(2, player.getName());
-                    insert.addBatch();
+    private boolean upgradeTable(int dbVersion) throws SQLException {
+        switch (dbVersion) {
+        
+        case 0:
+            upgradeFromVersion0();
+            break;
+            
+        default:
+           logger.warning("Unknown table schema version: table %s, version %d",
+                   tableName, dbVersion);
+           return false;
+        }
+        
+        return true;
+    }
+    
+    @SuppressWarnings("deprecation")
+    void upgradeFromVersion0() throws SQLException {
+        String newTableName = tableName + "_new";
+        createEmptyTable(newTableName);
+
+        Server server = plugin.getServer();
+        Connection connection = database.getConnection();
+
+        try (Statement stmt = connection.createStatement()) {
+            try (ResultSet rs = stmt.executeQuery
+                    (String.format("SELECT id, name FROM %s", tableName))) {
+                try (PreparedStatement insert = connection.prepareStatement
+                        (String.format("INSERT INTO %s VALUES (?,?,?)", newTableName))) {
+                    byte[] uuid = new byte[Constants.sizeOfUUID];
+                    int batchSize = 0;
+                    while (rs.next()) {
+                        String name = rs.getString(2);
+                        Database.toBytes(server.getOfflinePlayer(name).getUniqueId(), uuid);
+                        insert.setInt(1, rs.getInt(1));
+                        insert.setBytes(2, uuid);
+                        insert.setString(3, name);
+                        insert.addBatch();
+                        if (maxBatchSize <= ++batchSize) {
+                            insert.executeBatch();
+                            batchSize = 0;
+                        }
+                    }
+                    insert.executeBatch();
                 }
-                insert.executeBatch();
             }
+            
+            stmt.executeUpdate(String.format
+                    ("RENAME TABLE %1$s TO %1$s_save, %2$s TO %1$s", tableName, newTableName));
+            database.setVersion(tableName, currentSchemaVersion);
+            stmt.executeUpdate(String.format("DROP TABLE IF EXISTS %s_save", tableName));
         }
     }
 
     public void disable() {
         cache.clear();
-        try {
-            if (findEntry != null) {
-                findEntry.close();
-                findEntry = null;
-            }
-            if (insertEntry != null) {
-                insertEntry.close();
-                insertEntry = null;
-            }
-            if (updateName != null) {
-                updateName.close();
-                updateName = null;
-            }
-        } catch (SQLException e) {
-            logger.warning(e, "Failed to close prepared statements.");
+        if (findEntry != null) {
+            try { findEntry.close(); } catch (SQLException e) {}
+            findEntry = null;
+        }
+        if (insertEntry != null) {
+            try { insertEntry.close(); } catch (SQLException e) {}
+            insertEntry = null;
+        }
+        if (updateName != null) {
+            try { updateName.close(); } catch (SQLException e) {}
+            updateName = null;
+        }
+        if (eraseStaleName != null) {
+            try { eraseStaleName.close(); } catch (SQLException e) {}
+            eraseStaleName = null;
         }
     }
 
@@ -139,7 +208,7 @@ public class PlayerTable {
         }
 
         OfflinePlayer player = plugin.getServer().getOfflinePlayer(uuid);
-        return enter(player.getUniqueId(), player.getName());
+        return enter(uuid, player.getName());
     }
 
     public int enter(UUID uuid, String name) throws SQLException {
@@ -178,7 +247,7 @@ public class PlayerTable {
                     }
                 }
             }
-            
+
             connection.commit();
         } finally {
             connection.setAutoCommit(true);
