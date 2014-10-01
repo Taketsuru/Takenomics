@@ -20,9 +20,9 @@ public class CommandDispatcher implements CommandExecutor {
         }
     }
 
-    private Messages messages;
-    private int commandPosition;
-    private String permissionPrefix;
+    private Messages                 messages;
+    private int                      commandPosition;
+    private String                   permissionPrefix;
     private Map<String, CommandInfo> table = new HashMap<String, CommandInfo>();
 
     public CommandDispatcher(Messages messages, String permissionPrefix) {
@@ -68,7 +68,9 @@ public class CommandDispatcher implements CommandExecutor {
             return false;
         }
 
-        if (! sender.isOp() && sender instanceof Player
+        if (sender instanceof Player
+                && ! (info.executor instanceof CommandDispatcher) 
+                && ! sender.isOp()
                 && ! ((Player)sender).hasPermission(info.permission)) {
             String cmdStr = getCommandString(cmd, args);
             messages.send((Player)sender, "noPermissionToRunCommand", cmdStr);
