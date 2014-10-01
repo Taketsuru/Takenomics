@@ -2,6 +2,7 @@ package jp.dip.myuminecraft.takenomics;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import org.bukkit.OfflinePlayer;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -10,7 +11,13 @@ import org.bukkit.scheduler.BukkitRunnable;
 
 public abstract class PeriodicTaxCollector extends TaxCollector {
 
+    enum State {
+        preparing,
+        collecting,
+    }
+
     BukkitRunnable      runnable;
+    State               state;
     List<OfflinePlayer> payers = new ArrayList<OfflinePlayer>();
     long                interval;
     int                 nextPayer;
@@ -56,6 +63,29 @@ public abstract class PeriodicTaxCollector extends TaxCollector {
         return result;
     }
 
+    public boolean loadTaxExemptList(Logger logger, FileConfiguration config,
+            String configName, Set<String> taxExempt) {
+        taxExempt.clear();
+
+        if (! config.contains(configName)) {
+            return false;
+        }
+        
+        if (! config.isList(configName)) {
+            logger.warning("%s is not a valid region name list.", configName);
+            return true;
+        }
+        
+        for (String regionId : config.getStringList(configName)) {
+            if (taxExempt.contains(regionId)) {
+                logger.warning("region %s appears more than once.", regionId);
+            }
+            taxExempt.add(regionId);
+        }
+        
+        return false;
+    }
+    
     public void disable() {
         if (runnable != null) {
             runnable.cancel();
@@ -64,7 +94,7 @@ public abstract class PeriodicTaxCollector extends TaxCollector {
     }
 
     void scheduleNextInterval() {
-        nextPayer = 0;
+        state = State.preparing;
         runnable = newCollectorTask();
         runnable.runTaskLater(plugin, interval * Constants.ticksPerSecond);        
     }
@@ -77,26 +107,48 @@ public abstract class PeriodicTaxCollector extends TaxCollector {
         };
     }
 
-    void collectFromPayers() {
-        long startTime = System.nanoTime();
-        long maxCollectionTime = 2 * 1000 * 1000; // 2ms
-        for (; nextPayer < payers.size(); ++nextPayer) {
+    protected boolean prepareCollection() {
+        return true;
+    }
 
-            if (maxCollectionTime <= System.nanoTime() - startTime) {
+    void collectFromPayers() {
+        switch (state) {
+        case preparing:
+            if (! prepareCollection()) {
                 runnable = newCollectorTask();
                 runnable.runTask(plugin);
                 return;
             }
 
-            OfflinePlayer payer = payers.get(nextPayer);
-            if (collect(payer)) {
-                int size = payers.size();
-                if (nextPayer < size - 1) {
-                    payers.set(nextPayer, payers.get(size - 1));
+            state = State.collecting;
+            nextPayer = 0;
+            // fall through
+            
+        case collecting:  
+            long startTime = System.nanoTime();
+            long maxCollectionTime = 2 * 1000 * 1000; // 2ms
+            for (; nextPayer < payers.size(); ++nextPayer) {
+    
+                if (maxCollectionTime <= System.nanoTime() - startTime) {
+                    runnable = newCollectorTask();
+                    runnable.runTask(plugin);
+                    return;
                 }
-                payers.remove(size - 1);
-                --nextPayer;
+    
+                OfflinePlayer payer = payers.get(nextPayer);
+                if (collect(payer)) {
+                    int size = payers.size();
+                    if (nextPayer < size - 1) {
+                        payers.set(nextPayer, payers.get(size - 1));
+                    }
+                    payers.remove(size - 1);
+                    --nextPayer;
+                }
             }
+            break;
+            
+        default:
+            break;
         }
 
         scheduleNextInterval();

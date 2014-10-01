@@ -23,20 +23,22 @@ import com.sk89q.worldguard.bukkit.WorldGuardPlugin;
 
 public class Takenomics extends JavaPlugin implements Listener {
 
-    Logger                   logger;
-    Messages                 messages;
-    CommandDispatcher        commandDispatcher;
-    SignScanner              signScanner;
-    Database                 database;
-    PlayerTable              playerTable;
-    WorldTable               worldTable;
-    AccessLog                accessLog;
-    TaxLogger                taxLogger;
-    Economy                  economy;
-    WorldGuardPlugin         worldGuard;
-    TaxOnSavingsCollector    taxOnSavingsCollector;
-    RedstoneTaxCollector     redstoneTaxCollector;
-    private ChestShopMonitor chestShopMonitor;
+    Logger                logger;
+    Messages              messages;
+    CommandDispatcher     commandDispatcher;
+    SignScanner           signScanner;
+    Database              database;
+    PlayerTable           playerTable;
+    WorldTable            worldTable;
+    AccessLog             accessLog;
+    TaxLogger             taxLogger;
+    Economy               economy;
+    WorldGuardPlugin      worldGuard;
+    RegionManager         regionManager;
+    TaxOnSavingsCollector taxOnSavingsCollector;
+    RedstoneTaxCollector  redstoneTaxCollector;
+    ChestShopMonitor      chestShopMonitor;
+    LivestockTaxCollector       mobTaxCollector;
 
     @Override
     public void onEnable() {
@@ -96,12 +98,19 @@ public class Takenomics extends JavaPlugin implements Listener {
             taxLogger = new TaxLogger(this);
             economy = getEconomyProvider();
             worldGuard = getWorldGuard();
+            regionManager = new RegionManager(this, logger, worldGuard);
 
-            taxOnSavingsCollector = new TaxOnSavingsCollector(this, logger, messages, taxLogger, economy);
+            taxOnSavingsCollector = new TaxOnSavingsCollector
+                    (this, logger, messages, taxLogger, economy);
             taxOnSavingsCollector.enable();
 
-            redstoneTaxCollector = new RedstoneTaxCollector(this, logger, messages, taxLogger, economy, worldGuard);
+            redstoneTaxCollector = new RedstoneTaxCollector
+                    (this, logger, messages, taxLogger, economy, regionManager);
             redstoneTaxCollector.enable();
+            
+            mobTaxCollector = new LivestockTaxCollector
+                    (this, logger, messages, database, regionManager, economy);
+            mobTaxCollector.enable();
         } catch (Throwable th) {
             getLogger().severe(th.toString());
             for (StackTraceElement e : th.getStackTrace()) {
@@ -173,6 +182,11 @@ public class Takenomics extends JavaPlugin implements Listener {
     
     @Override
     public void onDisable() {
+        if (mobTaxCollector != null) {
+            mobTaxCollector.disable();
+            mobTaxCollector = null;
+        }
+
         if (redstoneTaxCollector != null) {
             redstoneTaxCollector.disable();
             redstoneTaxCollector = null;

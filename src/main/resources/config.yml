@@ -37,6 +37,24 @@ redstoneTax:
     rate: 10.0
   - min: 36000
     rate: 100.0
-  taxExempt:
-  - towncenter
-  - owner_farm
+  taxExempt: []
+
+livestockTax:
+  enable: true
+  debug: false
+  interval: 600
+  untamedTable:
+  - min: 3
+    rate: 100.0
+  - min: 10
+    rate: 500.0
+  - min: 20
+    rate: 2500.0
+  tamedTable:
+  - min: 3
+    rate: 1000.0
+  - min: 5
+    rate: 5000.0
+  - min: 10
+    rate: 50000.0
+  taxExempt: []

@@ -23,18 +23,16 @@ public class TaxTable {
     public TaxTable() {
     }
 
-    public boolean loadConfig(Logger logger, FileConfiguration config, String configPrefix) {
+    public boolean loadConfig(Logger logger, FileConfiguration config, String configName) {
         classes.clear();
         
         boolean result = true;
 
-        String configClasses = configPrefix + ".table";
-
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> classConfig =
-        (List<Map<String, Object>>) config.getList(configClasses);
+        (List<Map<String, Object>>) config.getList(configName);
         if (classConfig == null) {
-            logger.warning("No '%s' configurations.", configClasses);
+            logger.warning("No '%s' configurations.", configName);
             result = false;
         } else {
             int index = 0;
@@ -44,11 +42,11 @@ public class TaxTable {
 
                 if (min == null) {
                     logger.warning("%d-th row of '%s' doesn't have 'min' field.",
-                            index + 1, configClasses);
+                            index + 1, configName);
                     result = false;
                 } else if (! (min instanceof Number)) {
                     logger.warning("'min' field of %d-th row of '%s' has an invalid value.",
-                            index + 1, configClasses);
+                            index + 1, configName);
                     result = false;
                 }
 
@@ -56,11 +54,11 @@ public class TaxTable {
 
                 if (rate == null) {
                     logger.warning("%d-th row of '%s' doesn't have 'rate' field.",
-                            index + 1, configClasses);
+                            index + 1, configName);
                     result = false;
                 } else if (! (rate instanceof Number)) {
                     logger.warning("'rate' field of %d-th row of '%s' has an invalid value.",
-                            index + 1, configClasses);
+                            index + 1, configName);
                     result = false;
                 }
 

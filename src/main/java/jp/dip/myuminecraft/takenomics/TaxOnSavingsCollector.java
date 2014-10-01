@@ -66,7 +66,7 @@ public class TaxOnSavingsCollector extends PeriodicTaxCollector implements Liste
     protected boolean loadConfig(Logger logger, FileConfiguration config, String configPrefix, boolean error) {
         boolean result = super.loadConfig(logger,  config, configPrefix, error);
         
-        if (! table.loadConfig(logger, config, configPrefix)) {
+        if (! table.loadConfig(logger, config, configPrefix + ".table")) {
             result = true;
         }
         

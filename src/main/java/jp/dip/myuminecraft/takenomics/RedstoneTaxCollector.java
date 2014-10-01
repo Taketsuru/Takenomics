@@ -1,5 +1,6 @@
 package jp.dip.myuminecraft.takenomics;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -20,7 +21,6 @@ import org.bukkit.event.block.BlockPhysicsEvent;
 import org.bukkit.event.block.BlockRedstoneEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import com.sk89q.worldguard.bukkit.WorldGuardPlugin;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 
 public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listener {
@@ -59,17 +59,17 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
     TaxLogger                     taxLogger;
     TaxTable                      taxTable       = new TaxTable();
     Economy                       economy;
-    WorldGuardPlugin              worldGuard;
+    RegionManager                 regionManager;
     Map<OfflinePlayer, PayerInfo> payersTable    = new HashMap<OfflinePlayer, PayerInfo>();
     Set<String>                   taxFreeRegions = new HashSet<String>();
 
     public RedstoneTaxCollector(JavaPlugin plugin, Logger logger, Messages messages,
-            TaxLogger taxLogger, Economy economy, WorldGuardPlugin worldGuard) {
+            TaxLogger taxLogger, Economy economy, RegionManager regionManager) {
         super(plugin, logger);
         this.messages = messages;
         this.taxLogger = taxLogger;
         this.economy = economy;
-        this.worldGuard = worldGuard;
+        this.regionManager = regionManager;
     }
     
     public void enable() {
@@ -86,7 +86,7 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
     protected boolean loadConfig(Logger logger, FileConfiguration config, String configPrefix, boolean error) {
         boolean result = super.loadConfig(logger,  config, configPrefix, error);
         
-        if (! taxTable.loadConfig(logger, config, configPrefix)) {
+        if (! taxTable.loadConfig(logger, config, configPrefix + ".table")) {
             result = true;
         }
 
@@ -116,29 +116,14 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
         }
 
         Location loc = event.getBlock().getLocation();
-
-        if (debug) {
-            logger.info("redstone: monitor %s:%d,%d,%d",
-                    loc.getWorld().getName(), loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
-        }
-
-        GetBlockOwnersResult gboResult = getBlockOwners(loc);
-        if (gboResult == null) {
-            if (debug) {
-                logger.info("redstone: no owner");
-            }
-            return;
-        }
-        
-        if (gboResult.taxFree) {
-            if (debug) {
-                logger.info("redstone: tax free");
-            }
+        ProtectedRegion region = regionManager.getHighestPriorityRegion(loc);
+        if (region == null || taxFreeRegions.contains(region.getId())) {
             return;
         }
 
+        Collection<UUID> owners = regionManager.getOwners(region);       
         Server server = plugin.getServer();
-        for (UUID ownerUUID : gboResult.owners) {
+        for (UUID ownerUUID : owners) {
             OfflinePlayer owner = server.getOfflinePlayer(ownerUUID);
             PayerInfo record = payersTable.get(owner);
             if (record == null) {
@@ -148,58 +133,10 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
             }
 
             if (record.arrears == 0.0) {
-                if (debug) {
-                    logger.info("monitor: owner: %s", owner.getName());
-                }
                 ++record.switching;
                 break;
             }
         }
-    }
-    
-    class GetBlockOwnersResult {
-        boolean   taxFree;
-        Set<UUID> owners;
-        
-        GetBlockOwnersResult(Set<UUID> owners, boolean taxFree) {
-            this.owners = owners;
-            this.taxFree = taxFree;
-        }
-    }
-
-    @SuppressWarnings("deprecation")
-    GetBlockOwnersResult getBlockOwners(Location loc) {
-        ProtectedRegion highest = null;
-        int currentPriority = Integer.MIN_VALUE;
-        for (ProtectedRegion region
-                : worldGuard.getRegionManager(loc.getWorld()).getApplicableRegions(loc)) {
-            int regionPriority = region.getPriority();
-            if (currentPriority < regionPriority) {
-                highest = region;
-                currentPriority = regionPriority;
-            }
-        }
-        
-        if (debug) {
-            logger.info("redstone: hit %s",
-                    highest == null ? "<none>" : highest.getId());
-        }
-        
-        if (highest == null) {
-            return null;
-        }
-        
-        //Set<UUID> ownerSet = new HashSet<UUID>(highest.getOwners().getUniqueIds());
-        Set<UUID> ownerSet = new HashSet<UUID>();
-        Server server = plugin.getServer();
-        for (String ownerName : highest.getOwners().getPlayers()) {
-            ownerSet.add(server.getOfflinePlayer(ownerName).getUniqueId());
-        }
-
-        return highest == null
-                ? null
-                : new GetBlockOwnersResult(ownerSet,
-                        taxFreeRegions.contains(highest.getId()));
     }
 
     @EventHandler
@@ -224,28 +161,17 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
     void cancelIfThereIsArrears(BlockPhysicsEvent event) {
         Location loc = event.getBlock().getLocation();
 
-        if (debug) {
-            logger.info("redstone: physics %s:%d,%d,%d",
-                    loc.getWorld().getName(),
-                    loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
-        }
-
+        ProtectedRegion region = regionManager.getHighestPriorityRegion(loc);
         boolean paid = false;
-
-        GetBlockOwnersResult gboResult = getBlockOwners(loc);
-
-        if (gboResult != null) {
-            if (gboResult.taxFree) {
+        if (region != null) {
+            if (taxFreeRegions.contains(region.getId())) {
                 paid = true;
-            } else {
+            } else {  
                 Server server = plugin.getServer();
-                for (UUID uuid : gboResult.owners) {
+                for (UUID uuid : regionManager.getOwners(region)) {
                     OfflinePlayer player = server.getOfflinePlayer(uuid);
                     PayerInfo record = payersTable.get(player);
                     if (record == null || record.arrears == 0.0) {
-                        if (debug) {
-                            logger.info("redstone: owner: %s", player.getName());
-                        }
                         paid = true;
                         break;
                     }            
@@ -254,10 +180,6 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
         }
 
         if (! paid) {
-            if (debug) {
-                logger.info("redstone: cancelled");
-            }
-
             event.setCancelled(true);
         }
     }
