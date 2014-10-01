@@ -70,13 +70,9 @@ public class AccessLog {
     }
 
     public void disable() {
-        try {
-            if (insertEntry != null) {
-                insertEntry.close();
-                insertEntry = null;
-            }
-        } catch (SQLException e) {
-            logger.warning(e, "Failed to close prepared statements.");
+        if (insertEntry != null) {
+            try { insertEntry.close(); } catch (SQLException e) {}
+            insertEntry = null;
         }
     }
 
