@@ -214,7 +214,9 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
             }
             messages.send(player, "mobTaxNoticeTotal", tax);            
         }
+
         economy.withdrawPlayer(payer, paid);
+
         info.untamedCount = 0;
         info.tamedCount = 0;
         info.arrears = tax - paid;
@@ -253,11 +255,20 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
         }
 
         if (entity instanceof Ageable
-                && isBreedableWith((Ageable)entity, items.getType())
-                && ! (entity instanceof Tameable && ((Tameable)entity).isTamed())
-                && ! maySpawnAnimals(player, entity.getLocation())) {
+                && isBreedableWith((Ageable)entity, items.getType())) {
+
+            if (hasArrears(player)) {
+                messages.send(player, "mobTaxBreedHasArrears");
+            } else if (! (entity instanceof Tameable && ((Tameable)entity).isTamed())
+                    && ! isInPlayersLand(player, entity.getLocation())) {
+                messages.send(player, "mobTaxBreedNoRegion");
+            } else {
+                return;
+            }
+
             event.setCancelled(true);
             event.getPlayer().updateInventory();
+            
             return;
         }
     }       
@@ -307,26 +318,26 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
     @EventHandler
     public void onPlayerEggThrow(PlayerEggThrowEvent event) {
         Player player = event.getPlayer();
-        if (! maySpawnAnimals(player, event.getEgg().getLocation())) {
-            event.setNumHatches((byte)0);
-        }
-    }
-
-    boolean maySpawnAnimals(Player player, Location animalLocation) {
-        UUID playerId = player.getUniqueId();
-        ProtectedRegion region = regionManager.getHighestPriorityRegion(animalLocation);
-
-        if (region == null || ! regionManager.getOwners(region).contains(playerId)) {
-            messages.send(player, "mobTaxBreedNoRegion");
-            return false;
-        }
-        
-        if (accountingRecords.containsKey(playerId)
-                && 0.0 < accountingRecords.get(playerId).arrears) {
+        if (hasArrears(player)) {
             messages.send(player, "mobTaxBreedHasArrears");
-            return false;
+        } else if (! isInPlayersLand(player, event.getEgg().getLocation())) {
+            messages.send(player, "mobTaxBreedNoRegion");
+        } else {
+            return;
         }
-
-        return true;
+        event.setNumHatches((byte)0);
     }
+
+    boolean isInPlayersLand(Player player, Location location) {
+        UUID playerId = player.getUniqueId();
+        ProtectedRegion region = regionManager.getHighestPriorityRegion(location);
+        return region != null && regionManager.getOwners(region).contains(playerId);
+    }
+
+    boolean hasArrears(Player player) {
+        UUID playerId = player.getUniqueId();
+        return accountingRecords.containsKey(playerId)
+                && 0.0 < accountingRecords.get(playerId).arrears;
+    }
+
 }
