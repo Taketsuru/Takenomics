@@ -2,7 +2,10 @@ package jp.dip.myuminecraft.takenomics;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Properties;
 import java.util.UUID;
 
@@ -11,18 +14,22 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public class Database {
 
-    static final String configPrefix      = "database";
-    static final String configEnable      = configPrefix + ".enable";
-    static final String configDebug       = configPrefix + ".debug";
-    static final String configHost        = configPrefix + ".host";
-    static final String configPort        = configPrefix + ".port";
-    static final String configDatabase    = configPrefix + ".database";
-    static final String configUser        = configPrefix + ".user";
-    static final String configPassword    = configPrefix + ".password";
-    static final String configTablePrefix = configPrefix + ".tablePrefix";
+    static final String configPrefix       = "database";
+    static final String configEnable       = configPrefix + ".enable";
+    static final String configDebug        = configPrefix + ".debug";
+    static final String configHost         = configPrefix + ".host";
+    static final String configPort         = configPrefix + ".port";
+    static final String configDatabase     = configPrefix + ".database";
+    static final String configUser         = configPrefix + ".user";
+    static final String configPassword     = configPrefix + ".password";
+    static final String configTablePrefix  = configPrefix + ".tablePrefix";
     JavaPlugin          plugin;
     Logger              logger;
     Connection          connection;
+    PreparedStatement   checkTable;
+    PreparedStatement   queryVersion;
+    PreparedStatement   updateVersion;
+    PreparedStatement   insertVersion;
     JobQueue            queue;
     String              database;
     String              tablePrefix;
@@ -108,19 +115,68 @@ public class Database {
             logger.warning(e, "Failed to connect to %s.", url);
             return false;
         }
-        
+
+        try {
+            checkTable = connection.prepareStatement
+                ("SELECT table_name FROM information_schema.tables "
+                        + "WHERE table_schema = ? AND table_name = ?");
+
+            String versionTableName = tablePrefix + "version";
+
+            try (Statement stmt = connection.createStatement()) {
+                stmt.execute(String.format("CREATE TABLE IF NOT EXISTS %s ("
+                        + "table_name VARCHAR(63) CHARACTER SET ascii NOT NULL,"
+                        + "schema_version TINYINT UNSIGNED NOT NULL,"
+                        + "PRIMARY KEY (table_name))",
+                        versionTableName));
+            }
+
+            queryVersion = connection.prepareStatement
+                    (String.format("SELECT schema_version FROM %s WHERE table_name=?",
+                            versionTableName));
+
+            updateVersion = connection.prepareStatement
+                    (String.format("UPDATE %s SET schema_version=? WHERE table_name=?",
+                            versionTableName));
+            
+            insertVersion = connection.prepareStatement
+                    (String.format("INSERT INTO %s VALUES (?,?)",
+                            versionTableName));
+
+        } catch (SQLException e) {
+            logger.warning(e, "Failed to initialize database connection.");
+            disable();
+            return false;
+        }
+
         return true;
     }
     
     public void disable() {
         queue.drain();
 
+        if (insertVersion != null) {
+            try { insertVersion.close(); } catch (SQLException e) {}
+            insertVersion = null;
+        }
+
+        if (updateVersion != null) {
+            try { updateVersion.close(); } catch (SQLException e) {}
+            updateVersion = null;
+        }
+
+        if (queryVersion != null) {
+            try { queryVersion.close(); } catch (SQLException e) {}
+            queryVersion = null;
+        }
+
+        if (checkTable != null) {
+            try { checkTable.close(); } catch (SQLException e) {}
+            checkTable = null;
+        }
+
         if (connection != null) {
-            try {
-                connection.close();
-            } catch (SQLException e) {
-                logger.warning(e, "Failed to close connection.");            
-            }
+            try { connection.close(); } catch (SQLException e) {}
             connection = null;
         }
         
@@ -139,7 +195,34 @@ public class Database {
     public Connection getConnection() {
         return connection;
     }
-    
+
+    public boolean hasTable(String tableName) throws SQLException {
+        checkTable.setString(1, getDatabaseName());
+        checkTable.setString(2, tableName);
+        try (ResultSet rs = checkTable.executeQuery()) {
+            return rs.next();
+        }
+    }
+
+    public int getVersion(String tableName) throws SQLException {
+        queryVersion.setString(1, tableName);
+        try (ResultSet rs = queryVersion.executeQuery()) {
+            return rs.next() ? rs.getInt(1) : 0;
+        }
+    }
+
+    public void setVersion(String tableName, int version) throws SQLException {
+        if (getVersion(tableName) == 0) {
+            insertVersion.setString(1, tableName);
+            insertVersion.setInt(2, version);
+            insertVersion.executeUpdate();
+        } else {
+            updateVersion.setInt(1, version);
+            updateVersion.setString(2, tableName);
+            updateVersion.executeUpdate();
+        }
+    }
+
     public void runAsynchronously(Runnable runnable) {
         queue.runAsynchronously(runnable);
     }
