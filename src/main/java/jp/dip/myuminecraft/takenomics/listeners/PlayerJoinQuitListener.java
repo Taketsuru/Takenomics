@@ -27,10 +27,12 @@ public class PlayerJoinQuitListener implements Listener {
     
     @EventHandler
     public void onAsyncPlayerPreLogin(AsyncPlayerPreLoginEvent event) {
-        try {
-            playerTable.enter(event.getUniqueId(), event.getName());
-        } catch (SQLException e) {
-            logger.warning(e, "Failed to enter a record into table `players`.");
+        if (playerTable != null) {
+            try {
+                playerTable.enter(event.getUniqueId(), event.getName());
+            } catch (SQLException e) {
+                logger.warning(e, "Failed to enter a player record.");
+            }
         }
     }
 
