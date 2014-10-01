@@ -16,11 +16,13 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public class WorldTable {
 
+    static final int     currentSchemaVersion = 0;
+    static final int     maxBatchSize         = 1;
     JavaPlugin           plugin;
     Logger               logger;
     Database             database;
     String               tableName;
-    Map<String, Integer> cache = new HashMap<String, Integer>();
+    Map<String, Integer> cache                = new HashMap<String, Integer>();
     PreparedStatement    insertEntry;
     PreparedStatement    findEntry;
 
@@ -44,23 +46,26 @@ public class WorldTable {
 
         try {
 
-            try (PreparedStatement stmt = connection.prepareStatement
-                    ("SELECT table_name FROM information_schema.tables "
-                            + "WHERE table_schema = ? AND table_name = ?")) {
-                stmt.setString(1, database.getDatabaseName());
-                stmt.setString(2, tableName);
-                try (ResultSet rs = stmt.executeQuery()) {
-                    if (! rs.next()) {
-                        createTable(tableName);
-                    }
+            if (! database.hasTable(tableName)) {
+                createNewTable(tableName);
+            } else {
+                int version = database.getVersion(tableName);
+                if (currentSchemaVersion < version) {
+                    logger.warning("The schema version of %s is higher (%d) "
+                            + "than the current version (%d).",
+                            tableName, version, currentSchemaVersion);
+                    disable();
+                    return false;
                 }
             }
-
+            
             findEntry = connection.prepareStatement
                     (String.format("SELECT id FROM %s WHERE name=?", tableName));
             insertEntry = connection.prepareStatement
                     (String.format("INSERT INTO %s VALUES (NULL,?)", tableName),
                             Statement.RETURN_GENERATED_KEYS);
+
+            enterLoadedWorlds();
 
         } catch (SQLException e) {
             logger.warning(e, "Failed to initialize worlds table.");
@@ -71,71 +76,35 @@ public class WorldTable {
         return true;
     }
 
-    void createTable(String tableName) throws SQLException {
+    void createNewTable(String tableName) throws SQLException {
         Connection connection = database.getConnection();
-
-        String idType = "TINYINT UNSIGNED AUTO_INCREMENT NOT NULL";
-        String nameType = "VARCHAR(50) CHARACTER SET ascii NOT NULL";
-
         try (Statement stmt = connection.createStatement()) {
             stmt.execute(String.format
                     ("CREATE TABLE %s ("
-                            + "id %s,"
-                            + "name %s,"
+                            + "id TINYINT UNSIGNED AUTO_INCREMENT NOT NULL,"
+                            + "name VARCHAR(50) CHARACTER SET ascii NOT NULL,"
                             + "PRIMARY KEY (id),"
                             + "UNIQUE (name))",
-                            tableName, idType, nameType));
+                            tableName));
 
-            stmt.execute(String.format
-                    ("CREATE TEMPORARY TABLE IF NOT EXISTS %s_load ("
-                            + "name %s"
-                            + ") ENGINE=MEMORY",
-                            tableName, nameType));
+        }
+    }
 
-            try (PreparedStatement insert =
-                    connection.prepareStatement
-                    (String.format("INSERT INTO %s_load VALUES (?)", tableName))) {
-                for (World world : plugin.getServer().getWorlds()) {
-                    insert.setString(1, world.getName());
-                    insert.addBatch();
-                }
-                insert.executeBatch();
-            }
-
-            stmt.execute(String.format
-                    ("INSERT INTO %1$s "
-                            + "SELECT NULL, %1$s_load.name "
-                            + "FROM %1$s_load LEFT JOIN %1$s "
-                            + "ON %1$s_load.name = %1$s.name "
-                            + "WHERE %1$s.id IS NULL", tableName));
-
-            try (ResultSet result = stmt.executeQuery(String.format
-                    ("SELECT %1$s.id, %1$s.name "
-                            + "FROM %1$s INNER JOIN %1$s_load "
-                            + "ON %1$s.name = %1$s_load.name "
-                            + "WHERE %1$s_load.name IS NOT NULL", tableName))) {
-                while (result.next()) {
-                    cache.put(result.getString(2), result.getInt(1));
-                }
-            }
-
-            stmt.execute(String.format("DROP TABLE %s_load", tableName));
+    void enterLoadedWorlds() throws SQLException {
+        for (World w : plugin.getServer().getWorlds()) {
+            enter(w.getName());
         }
     }
 
     public void disable() {
         cache.clear();
-        try {
-            if (findEntry != null) {
-                findEntry.close();
-                findEntry = null;
-            }
-            if (insertEntry != null) {
-                insertEntry.close();
-                insertEntry = null;
-            }
-        } catch (SQLException e) {
-            logger.warning(e, "Failed to close prepared statements.");
+        if (findEntry != null) {
+            try { findEntry.close(); } catch (SQLException e) {}
+            findEntry = null;
+        }
+        if (insertEntry != null) {
+            try { insertEntry.close(); } catch (SQLException e) {}
+            insertEntry = null;
         }
     }
 
