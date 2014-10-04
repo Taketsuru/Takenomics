@@ -40,23 +40,30 @@ public class JobQueue {
     }
     
     void processAsyncTasks() {
-        Runnable task;
-        synchronized (this) {
-            assert ! requests.isEmpty();
-            task = requests.peek();
-        }
-
-        for (;;) {
-            task.run();
-
+        try {
+            Runnable task;
             synchronized (this) {
-                requests.poll();
-                if (requests.isEmpty()) {
-                    scheduledTask = null;
-                    return;
-                }
+                assert ! requests.isEmpty();
                 task = requests.peek();
-            }            
+            }
+    
+            for (;;) {
+                try {
+                    task.run();
+                } catch (Throwable t) {
+                    logger.warning(t, "Failed to run a job queue task.");
+                }
+    
+                synchronized (this) {
+                    requests.poll();
+                    if (requests.isEmpty()) {
+                        return;
+                    }
+                    task = requests.peek();
+                }            
+            }
+        } finally {
+            scheduledTask = null;
         }
     }
 
