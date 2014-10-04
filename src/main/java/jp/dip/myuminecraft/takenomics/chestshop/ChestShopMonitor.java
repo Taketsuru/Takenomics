@@ -424,7 +424,7 @@ public class ChestShopMonitor implements Listener {
                     + "AND z = %d "
                     + "AND y = %d "
                     + "AND world = %d",
-                    shopTableName, row.x, row.z, row.y, row.world);
+                    shopTableName, row.x, row.z, row.y, worldTable.getId(row.world));
             statement.executeUpdate(stmt);
         }
     }
