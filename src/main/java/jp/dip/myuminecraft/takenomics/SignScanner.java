@@ -240,11 +240,7 @@ public class SignScanner {
                     break;
                 }
 
-                Chunk chunk = world.getChunkAt(chunkX, chunkZ);
-                if (chunk.getBlock(0, 0, 0).getType() != Material.BEDROCK) {
-                    logger.warning("not bedrock?!");
-                }
-                    
+                Chunk chunk = world.getChunkAt(chunkX, chunkZ);                    
                 scanChunk(chunk);
                 world.unloadChunkRequest(chunkX, chunkZ);
             }
