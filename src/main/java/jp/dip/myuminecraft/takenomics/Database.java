@@ -231,8 +231,8 @@ public class Database {
         long high = uuid.getMostSignificantBits();
         long low  = uuid.getLeastSignificantBits();
         for (int i = 0; i < 8; ++i) {
-            result[i] = (byte)(high >>> (64 - i * 8));
-            result[i + 8] = (byte)(low >>> (64 - i * 8));
+            result[i] = (byte)((high >>> (56 - i * 8)) & 0xff);
+            result[i + 8] = (byte)((low >>> (56 - i * 8)) & 0xff);
         }
     }
 
@@ -240,8 +240,8 @@ public class Database {
         long high = 0;
         long low  = 0;
         for (int i = 0; i < 8; ++i) {
-            high |= ((long)uuidBytes[i] << (64 - i * 8));
-            low |= ((long)uuidBytes[i + 8] << (64 - i * 8));
+            high |= (((long)uuidBytes[i] & 0xff) << (56 - i * 8));
+            low |= (((long)uuidBytes[i + 8] & 0xff) << (56 - i * 8));
         }
         return new UUID(high, low);
     }

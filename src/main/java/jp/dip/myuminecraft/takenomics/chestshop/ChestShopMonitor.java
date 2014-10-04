@@ -100,14 +100,14 @@ public class ChestShopMonitor implements Listener {
     public boolean enable() {
         Plugin result = plugin.getServer().getPluginManager().getPlugin("ChestShop");
         if (result == null || ! (result instanceof ChestShop)) {
-            logger.info("ChestShop is not found.");
+            logger.warning("ChestShop is not found.");
             return false;
         }
 
-        String tablePrefix = database.getTablePrefix() + "chestshop_";
+        String tablePrefix = database.getTablePrefix();
         shopTableName = tablePrefix + "shops";
         transactionTableName = tablePrefix + "transactions";
-        temporaryShopTableName = tablePrefix + "scanned_shops";
+        temporaryShopTableName = tablePrefix + "shops_temp";
 
         try {
             createTables();

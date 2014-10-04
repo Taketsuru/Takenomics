@@ -5,6 +5,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -25,16 +26,22 @@ public class PlayerTable {
     Logger             logger;
     Database           database;
     String             tableName;
-    Map<UUID, Integer> cache                = new HashMap<UUID, Integer>();
+    Map<UUID, Integer> idCache;
+    Map<String, UUID>  nameCache;
     PreparedStatement  insertEntry;
     PreparedStatement  findEntry;
     PreparedStatement  updateName;
     PreparedStatement  eraseStaleName;
+    PreparedStatement  findFromName;
 
-    public PlayerTable(JavaPlugin plugin, Logger logger, Database database) {
+    public PlayerTable(JavaPlugin plugin,
+            Logger logger, Database database) {
         this.plugin = plugin;
         this.logger = logger;
         this.database = database;
+        this.idCache = Collections.synchronizedMap
+                (new HashMap<UUID, Integer>());
+        this.nameCache = new HashMap<String, UUID>();
     }
     
     public String getTableName() {
@@ -57,17 +64,20 @@ public class PlayerTable {
                 importFromOfflinePlayerList();
             } else {
                 int version = database.getVersion(tableName);
-                if (version < currentSchemaVersion) {
-                    if (! upgradeTable(version)) {
-                        disable();
-                        return false;
-                    }
-                } else if (currentSchemaVersion < version) {
-                    logger.warning("The schema version of %s is higher (%d) "
-                            + "than the current version (%d).",
-                            tableName, version, currentSchemaVersion);
-                    disable();
-                    return false;
+                switch (version) {
+                case currentSchemaVersion:
+                    break;
+
+                case 0:
+                    upgradeFromVersion0();
+                    break;
+                    
+                default:
+                   logger.warning("Unknown table schema version:"
+                           + " table %s, version %d",
+                           tableName, version);
+                   disable();
+                   return false;
                 }
             }
 
@@ -81,6 +91,18 @@ public class PlayerTable {
             eraseStaleName = connection.prepareStatement
                     (String.format("UPDATE %s SET name=NULL WHERE uuid != ? AND name = ?",
                             tableName));
+            findFromName = connection.prepareStatement
+                    (String.format("SELECT id, uuid FROM %s WHERE name=?", tableName));
+            
+            try (Statement statement = connection.createStatement()) {
+                ResultSet rs = statement.executeQuery
+                        (String.format("SELECT uuid, name, id FROM %s", tableName));
+                while (rs.next()) {
+                    UUID uuid = Database.toUUID(rs.getBytes(1));
+                    idCache.put(uuid,  rs.getInt(3));
+                    nameCache.put(rs.getString(2).toLowerCase(), uuid);
+                }
+            }
         } catch (SQLException e) {
             logger.warning(e, "Failed to initialize %s.", tableName);
             disable();
@@ -125,22 +147,6 @@ public class PlayerTable {
         }
     }
 
-    private boolean upgradeTable(int dbVersion) throws SQLException {
-        switch (dbVersion) {
-        
-        case 0:
-            upgradeFromVersion0();
-            break;
-            
-        default:
-           logger.warning("Unknown table schema version: table %s, version %d",
-                   tableName, dbVersion);
-           return false;
-        }
-        
-        return true;
-    }
-    
     @SuppressWarnings("deprecation")
     void upgradeFromVersion0() throws SQLException {
         String newTableName = tableName + "_new";
@@ -173,14 +179,17 @@ public class PlayerTable {
             }
             
             stmt.executeUpdate(String.format
-                    ("RENAME TABLE %1$s TO %1$s_save, %2$s TO %1$s", tableName, newTableName));
+                    ("RENAME TABLE %1$s TO %1$s_save, %2$s TO %1$s",
+                            tableName, newTableName));
             database.setVersion(tableName, currentSchemaVersion);
-            stmt.executeUpdate(String.format("DROP TABLE IF EXISTS %s_save", tableName));
+            stmt.executeUpdate
+            (String.format("DROP TABLE IF EXISTS %s_save", tableName));
         }
     }
 
     public void disable() {
-        cache.clear();
+        idCache.clear();
+        nameCache.clear();
         if (findEntry != null) {
             try { findEntry.close(); } catch (SQLException e) {}
             findEntry = null;
@@ -200,15 +209,17 @@ public class PlayerTable {
     }
 
     public int getId(UUID uuid) throws SQLException {
-        synchronized (this) {
-            Integer id = cache.get(uuid);
-            if (id != null) {
-                return id;
-            }
+        Integer id = idCache.get(uuid);
+        if (id != null) {
+            return id;
         }
 
         OfflinePlayer player = plugin.getServer().getOfflinePlayer(uuid);
         return enter(uuid, player.getName());
+    }
+
+    public UUID getUniqueIdForName(String name) {
+        return nameCache.get(name.toLowerCase());
     }
 
     public int enter(UUID uuid, String name) throws SQLException {
@@ -253,9 +264,8 @@ public class PlayerTable {
             connection.setAutoCommit(true);
         }
 
-        synchronized (this) {
-            cache.put(uuid, id);
-        }
+        idCache.put(uuid, id);
+        nameCache.put(name.toLowerCase(), uuid);
 
         return id;
     }

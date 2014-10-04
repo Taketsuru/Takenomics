@@ -1,12 +1,12 @@
 package jp.dip.myuminecraft.takenomics;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
+import jp.dip.myuminecraft.takenomics.models.PlayerTable;
+
 import org.bukkit.Location;
-import org.bukkit.Server;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import com.sk89q.worldguard.bukkit.WorldGuardPlugin;
@@ -16,22 +16,24 @@ public class RegionManager {
 
     JavaPlugin       plugin;
     Logger           logger;
+    PlayerTable      playerTable;
     WorldGuardPlugin worldGuard;
 
-    public RegionManager(JavaPlugin plugin, Logger logger, WorldGuardPlugin worldGuard) {
+    public RegionManager(JavaPlugin plugin, Logger logger,
+            PlayerTable playerTable, WorldGuardPlugin worldGuard) {
         this.plugin = plugin;
         this.logger = logger;
+        this.playerTable = playerTable;
         this.worldGuard = worldGuard;
     }
 
-    @SuppressWarnings("deprecation")
     public List<UUID> getOwners(ProtectedRegion region) {
         List<UUID> result = new ArrayList<UUID>();
         //List<UUID> result = new ArrayList<UUID>(highest.getOwners().getUniqueIds());
 
-        Server server = plugin.getServer();
         for (String ownerName : region.getOwners().getPlayers()) {
-            result.add(server.getOfflinePlayer(ownerName).getUniqueId());
+            UUID uuid = playerTable.getUniqueIdForName(ownerName);
+            result.add(uuid);
         }
 
         return result;

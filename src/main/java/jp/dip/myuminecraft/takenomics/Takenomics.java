@@ -38,7 +38,7 @@ public class Takenomics extends JavaPlugin implements Listener {
     TaxOnSavingsCollector taxOnSavingsCollector;
     RedstoneTaxCollector  redstoneTaxCollector;
     ChestShopMonitor      chestShopMonitor;
-    LivestockTaxCollector       mobTaxCollector;
+    LivestockTaxCollector mobTaxCollector;
 
     @Override
     public void onEnable() {
@@ -98,7 +98,7 @@ public class Takenomics extends JavaPlugin implements Listener {
             taxLogger = new TaxLogger(this);
             economy = getEconomyProvider();
             worldGuard = getWorldGuard();
-            regionManager = new RegionManager(this, logger, worldGuard);
+            regionManager = new RegionManager(this, logger, playerTable, worldGuard);
 
             taxOnSavingsCollector = new TaxOnSavingsCollector
                     (this, logger, messages, taxLogger, economy);
@@ -109,7 +109,7 @@ public class Takenomics extends JavaPlugin implements Listener {
             redstoneTaxCollector.enable();
             
             mobTaxCollector = new LivestockTaxCollector
-                    (this, logger, messages, database, regionManager, economy);
+                    (this, logger, messages, database, taxLogger, regionManager, economy);
             mobTaxCollector.enable();
         } catch (Throwable th) {
             getLogger().severe(th.toString());

@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import jp.dip.myuminecraft.takenomics.RedstoneTaxCollector.RedstoneTaxRecord;
 import net.milkbowl.vault.economy.Economy;
 
 import org.bukkit.Location;
@@ -40,6 +41,26 @@ import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 
 public class LivestockTaxCollector extends PeriodicTaxCollector implements Listener {
 
+    class LivestockTaxRecord extends TaxRecord {       
+        int    untamed;
+        int    tamed;
+        double arrears;
+        double paid;
+
+        LivestockTaxRecord(long timestamp, OfflinePlayer player, int untamed, int tamed,
+                double arrears, double paid) {
+             super(timestamp, player);
+             this.untamed = untamed;
+             this.tamed = tamed;
+             this.arrears = arrears;
+             this.paid = paid;
+        }
+        
+        protected String subclassToString() {
+            return String.format("livestock %d %d %f %f", untamed, tamed, arrears, paid);
+        }
+    }
+
     class PayerInfo {
         int    tamedCount;
         int    untamedCount;
@@ -49,6 +70,7 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
     static final long    maxPerTick        = 2 * 1000 * 1000;               // 2ms
     Messages             messages;
     Database             database;
+    TaxLogger            taxLogger;
     RegionManager        regionManager;
     Economy              economy;
     Set<String>          taxExempt         = new HashSet<String>();
@@ -60,10 +82,12 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
     Iterator<Animals>    entityIter;
 
     public LivestockTaxCollector(JavaPlugin plugin, Logger logger, Messages messages,
-            Database database, RegionManager regionManager, Economy economy) {
+            Database database, TaxLogger taxLogger, 
+            RegionManager regionManager, Economy economy) {
         super(plugin, logger);
         this.messages = messages;
         this.database = database;
+        this.taxLogger = taxLogger;
         this.regionManager = regionManager;
         this.economy = economy;
     }
@@ -183,7 +207,9 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
             return null;
         }
         
-        return server.getOfflinePlayer(owners.get(0));
+        UUID primaryOwner = owners.get(0);
+        
+        return server.getOfflinePlayer(primaryOwner);
     }
 
     @Override
@@ -213,6 +239,11 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
                 messages.send(player, "mobTaxNoticeArrears", info.arrears);
             }
             messages.send(player, "mobTaxNoticeTotal", tax);            
+        }
+
+        if (0.0 < paid || 0.0 < info.arrears) {
+            taxLogger.put(new LivestockTaxRecord(System.currentTimeMillis(),
+                    payer, livestockHeadCount, petHeadCount, info.arrears, paid));
         }
 
         economy.withdrawPlayer(payer, paid);
