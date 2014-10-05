@@ -226,7 +226,7 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
         double petRate = tamedTaxTable.getRate(petHeadCount);
         double tax = Math.floor(livestockRate * livestockHeadCount + petRate * petHeadCount + info.arrears);
         double balance = economy.getBalance(payer);
-        double paid = Math.floor(Math.min(tax, Math.max(0.0, balance)));
+        double paid = Math.min(tax, Math.max(0.0, Math.floor(balance)));
 
         if (payer.isOnline() && 0.0 < tax) {
             Player player = (Player)payer;

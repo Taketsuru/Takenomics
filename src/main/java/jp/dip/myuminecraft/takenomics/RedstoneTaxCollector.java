@@ -190,7 +190,7 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
         double rate = taxTable.getRate(charge);
 
         double arrears = info.arrears;
-        double tax = charge * rate + arrears;
+        double tax = Math.floor(charge * rate + arrears);
 
         Player onlinePlayer = payer.isOnline() ? payer.getPlayer() : null;
         if (onlinePlayer != null && 0.0 < tax) {
@@ -210,7 +210,7 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
             arrears = tax;              
         } else if (balance < tax) {
             paid = balance;
-            arrears = tax - balance;
+            arrears = tax - paid;
         } else {
             paid = tax;
             arrears = 0.0;
