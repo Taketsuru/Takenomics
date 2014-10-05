@@ -63,6 +63,7 @@ public class Takenomics extends JavaPlugin implements Listener {
             }
 
             if (database.getConnection() == null) {
+                logger.warning("No database connection.");
                 database = null;
             }
 
@@ -79,9 +80,7 @@ public class Takenomics extends JavaPlugin implements Listener {
             accessLog = new AccessLog(this, logger, database, playerTable);
             if (! accessLog.enable()) {
                 accessLog = null;
-            }
-            
-            if (accessLog != null) {
+            } else {
                 getServer().getPluginManager().registerEvents
                 (new PlayerJoinQuitListener(logger, playerTable, accessLog), this);
             }

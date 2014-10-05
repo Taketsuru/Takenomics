@@ -272,10 +272,8 @@ public class SignScanner {
             }
         }
 
-        if (!signBlocks.isEmpty()) {
-            Event event = new SignScanEvent(chunk, signBlocks);
-            plugin.getServer().getPluginManager().callEvent(event);
-        }
+        Event event = new SignScanEvent(chunk, signBlocks);
+        plugin.getServer().getPluginManager().callEvent(event);
     }
 
     void fetch() {
