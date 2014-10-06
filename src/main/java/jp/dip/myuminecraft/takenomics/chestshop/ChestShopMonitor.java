@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import jp.dip.myuminecraft.takenomics.CommandDispatcher;
 import jp.dip.myuminecraft.takenomics.Constants;
 import jp.dip.myuminecraft.takenomics.Database;
 import jp.dip.myuminecraft.takenomics.Logger;
@@ -30,6 +31,9 @@ import org.bukkit.block.BlockState;
 import org.bukkit.block.Chest;
 import org.bukkit.block.DoubleChest;
 import org.bukkit.block.Sign;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryCloseEvent;
@@ -119,6 +123,7 @@ public class ChestShopMonitor implements Listener {
     public static final int maxBatchSize         = 100;
     JavaPlugin              plugin;
     Logger                  logger;
+    CommandDispatcher       commandDispatcher;
     Database                database;
     PlayerTable             playerTable;
     WorldTable              worldTable;
@@ -136,13 +141,27 @@ public class ChestShopMonitor implements Listener {
     PreparedStatement       scrubShops;
     boolean                 needScrubing;
 
-    public ChestShopMonitor(JavaPlugin plugin, Logger logger,
-            Database database, PlayerTable playerTable, WorldTable worldTable) {
+    public ChestShopMonitor(JavaPlugin plugin, final Logger logger,
+            CommandDispatcher commandDispatcher, Database database,
+            PlayerTable playerTable, WorldTable worldTable) {
         this.plugin = plugin;
         this.logger = logger;
         this.database = database;
         this.playerTable = playerTable;
         this.worldTable = worldTable;
+        this.commandDispatcher = new CommandDispatcher(commandDispatcher, "shops");
+        this.commandDispatcher.addCommand("scrub", new CommandExecutor() {
+            @Override
+            public boolean onCommand(CommandSender sender, Command arg1,
+                    String arg2, String[] arg3) {
+                try {
+                    scrub();
+                } catch (SQLException e) {
+                    logger.warning(e, "failed to scrub shop table.");
+                }
+                return true;
+            }
+        });
     }
 
     public boolean enable() {
@@ -617,21 +636,6 @@ public class ChestShopMonitor implements Listener {
 
     void insertTransactionRecord(ShopRecord row, int playerId,
             TransactionType type, int amount) throws SQLException {
-        if (0 <= row.stock) {
-            switch (type) {
-            case BUY:
-                row.stock -= amount;
-                row.purchasableQuantity += amount;
-                break;                
-            case SELL:
-                row.stock += amount;
-                row.purchasableQuantity -= amount;
-                break;
-            default:
-                assert false : "type = " + type;
-            }
-        }
-
         Connection connection = database.getConnection();
         try (Statement statement = connection.createStatement()) {
             connection.setAutoCommit(false);

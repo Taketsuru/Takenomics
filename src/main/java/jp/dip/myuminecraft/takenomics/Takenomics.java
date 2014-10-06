@@ -87,7 +87,9 @@ public class Takenomics extends JavaPlugin implements Listener {
             
             chestShopMonitor = null;
             if (playerTable != null) {
-                chestShopMonitor = new ChestShopMonitor(this, logger, database, playerTable, worldTable);
+                chestShopMonitor = new ChestShopMonitor
+                        (this, logger, commandDispatcher,
+                        database, playerTable, worldTable);
                 if (! chestShopMonitor.enable()) {
                     logger.warning("Disable ChestShop and MySQL connector.");
                     chestShopMonitor = null;
