@@ -9,7 +9,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import jp.dip.myuminecraft.takenomics.RedstoneTaxCollector.RedstoneTaxRecord;
 import net.milkbowl.vault.economy.Economy;
 
 import org.bukkit.Location;
