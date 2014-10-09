@@ -31,6 +31,7 @@ import org.bukkit.entity.Tameable;
 import org.bukkit.entity.Wolf;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.player.PlayerEggThrowEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.inventory.ItemStack;
@@ -368,6 +369,43 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
         UUID playerId = player.getUniqueId();
         return accountingRecords.containsKey(playerId)
                 && 0.0 < accountingRecords.get(playerId).arrears;
+    }
+
+    @EventHandler
+    public void onCreatureSpawn(CreatureSpawnEvent event) {
+        if (event.isCancelled()) {
+            return;
+        }
+        
+        Entity entity = event.getEntity();
+        
+        switch (event.getSpawnReason()) {
+        case DISPENSE_EGG:
+            event.setCancelled(true);
+            break;
+
+        case NATURAL:
+            break;
+
+        default:
+            return;   
+        }
+
+        if (! (entity instanceof Animals)) {
+            return;
+        }
+
+        ProtectedRegion region = regionManager.getHighestPriorityRegion(event.getLocation());
+        if (region != null && ! taxExempt.contains(region.getId())) {
+            logger.info("%s spawn cancelled in %s @ %s:%d,%d,%d",
+                    entity.getClass().getName(),
+                    region.getId(),
+                    event.getLocation().getWorld().getName(),
+                    event.getLocation().getBlockX(),
+                    event.getLocation().getBlockY(),
+                    event.getLocation().getBlockZ());
+            event.setCancelled(true);
+        }
     }
 
 }
