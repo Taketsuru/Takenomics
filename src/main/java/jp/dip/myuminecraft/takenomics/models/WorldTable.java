@@ -38,7 +38,7 @@ public class WorldTable {
 
     public boolean enable() {
         if (database == null) {
-            return false;
+            return true;
         }
 
         tableName = database.getTablePrefix() + "worlds";
@@ -55,7 +55,7 @@ public class WorldTable {
                             + "than the current version (%d).",
                             tableName, version, currentSchemaVersion);
                     disable();
-                    return false;
+                    return true;
                 }
             }
             
@@ -70,10 +70,10 @@ public class WorldTable {
         } catch (SQLException e) {
             logger.warning(e, "Failed to initialize worlds table.");
             disable();
-            return false;
+            return true;
         }
 
-        return true;
+        return false;
     }
 
     void createNewTable(String tableName) throws SQLException {

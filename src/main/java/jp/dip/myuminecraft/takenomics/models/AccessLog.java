@@ -38,7 +38,7 @@ public class AccessLog {
 
     public boolean enable() {
         if (database == null || playerTable == null) {
-            return false;
+            return true;
         }
 
         Connection connection = database.getConnection();
@@ -63,10 +63,10 @@ public class AccessLog {
         } catch (SQLException e) {
             logger.warning(e, "Failed to initialize access log.");
             disable();
-            return false;
+            return true;
         }
 
-        return true;
+        return false;
     }
 
     public void disable() {

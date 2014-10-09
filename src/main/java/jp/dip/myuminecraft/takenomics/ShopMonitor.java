@@ -1,4 +1,4 @@
-package jp.dip.myuminecraft.takenomics.chestshop;
+package jp.dip.myuminecraft.takenomics;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -12,12 +12,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import jp.dip.myuminecraft.takenomics.CommandDispatcher;
-import jp.dip.myuminecraft.takenomics.Constants;
-import jp.dip.myuminecraft.takenomics.Database;
-import jp.dip.myuminecraft.takenomics.Logger;
-import jp.dip.myuminecraft.takenomics.SignScanEvent;
-import jp.dip.myuminecraft.takenomics.UnknownPlayerException;
 import jp.dip.myuminecraft.takenomics.models.PlayerTable;
 import jp.dip.myuminecraft.takenomics.models.WorldTable;
 
@@ -54,7 +48,7 @@ import com.Acrobot.ChestShop.Signs.ChestShopSign;
 import com.Acrobot.ChestShop.UUIDs.NameManager;
 import com.Acrobot.ChestShop.Utils.uBlock;
 
-public class ChestShopMonitor implements Listener {
+public class ShopMonitor implements Listener {
 
     class ShopRecord {
         int    x;
@@ -141,7 +135,7 @@ public class ChestShopMonitor implements Listener {
     PreparedStatement       scrubShops;
     boolean                 needScrubing;
 
-    public ChestShopMonitor(JavaPlugin plugin, final Logger logger,
+    public ShopMonitor(JavaPlugin plugin, final Logger logger,
             CommandDispatcher commandDispatcher, Database database,
             PlayerTable playerTable, WorldTable worldTable) {
         this.plugin = plugin;
@@ -167,13 +161,13 @@ public class ChestShopMonitor implements Listener {
     public boolean enable() {
         if (database == null || playerTable == null || worldTable == null) {
             logger.warning("No database connection.  Disabled chestshop monitor.");
-            return false;
+            return true;
         }
         
         Plugin result = plugin.getServer().getPluginManager().getPlugin("ChestShop");
         if (result == null || ! (result instanceof ChestShop)) {
             logger.warning("ChestShop is not found.");
-            return false;
+            return true;
         }
 
         String tablePrefix = database.getTablePrefix();
@@ -184,7 +178,7 @@ public class ChestShopMonitor implements Listener {
         try {
             needScrubing = false;
             if (setupShopTable()) {
-                return false;
+                return true;
             }
             createTransactionTableIfNecessary();
             createTemporaryShopTableIfNecessary();
@@ -197,11 +191,11 @@ public class ChestShopMonitor implements Listener {
         } catch (SQLException e) {
             logger.warning(e, "Failed to initialize ChestShop monitor.");
             disable();
-            return false;
+            return true;
         }
 
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
-        return true;
+        return false;
     }
 
     boolean setupShopTable() throws SQLException {

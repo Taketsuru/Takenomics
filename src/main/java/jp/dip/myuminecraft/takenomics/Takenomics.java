@@ -3,7 +3,6 @@ package jp.dip.myuminecraft.takenomics;
 import java.util.IllformedLocaleException;
 import java.util.Locale;
 
-import jp.dip.myuminecraft.takenomics.chestshop.ChestShopMonitor;
 import jp.dip.myuminecraft.takenomics.listeners.PlayerJoinQuitListener;
 import jp.dip.myuminecraft.takenomics.models.AccessLog;
 import jp.dip.myuminecraft.takenomics.models.PlayerTable;
@@ -37,7 +36,7 @@ public class Takenomics extends JavaPlugin implements Listener {
     RegionManager         regionManager;
     TaxOnSavingsCollector taxOnSavingsCollector;
     RedstoneTaxCollector  redstoneTaxCollector;
-    ChestShopMonitor      chestShopMonitor;
+    ShopMonitor      chestShopMonitor;
     LivestockTaxCollector mobTaxCollector;
 
     @Override
@@ -57,43 +56,34 @@ public class Takenomics extends JavaPlugin implements Listener {
             signScanner.enable();
 
             database = new Database(this, logger);
-            if (! database.enable()) {
-                logger.warning("Disable database access.");
-                database = null;
-            }
-
-            if (database.getConnection() == null) {
-                logger.warning("No database connection.");
+            if (database.enable() || database.getConnection() == null) {
                 database = null;
             }
 
             playerTable = new PlayerTable(this, logger, database);
-            if (! playerTable.enable()) {
+            if (playerTable.enable()) {
                 playerTable = null;
             }
  
             worldTable = new WorldTable(this, logger, database);
-            if (! worldTable.enable()) {
+            if (worldTable.enable()) {
                 worldTable = null;
             }
 
             accessLog = new AccessLog(this, logger, database, playerTable);
-            if (! accessLog.enable()) {
+            if (accessLog.enable()) {
                 accessLog = null;
             } else {
                 getServer().getPluginManager().registerEvents
                 (new PlayerJoinQuitListener(logger, playerTable, accessLog), this);
             }
-            
-            chestShopMonitor = null;
-            if (playerTable != null) {
-                chestShopMonitor = new ChestShopMonitor
-                        (this, logger, commandDispatcher,
-                        database, playerTable, worldTable);
-                if (! chestShopMonitor.enable()) {
-                    logger.warning("Disable ChestShop and MySQL connector.");
-                    chestShopMonitor = null;
-                }
+
+            chestShopMonitor = new ShopMonitor
+                    (this, logger, commandDispatcher,
+                            database, playerTable, worldTable);
+            if (chestShopMonitor.enable()) {
+                logger.warning("Disable shop monitor.");
+                chestShopMonitor = null;
             }
 
             taxLogger = new TaxLogger(this);

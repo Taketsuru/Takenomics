@@ -46,16 +46,16 @@ public class Database {
         
         connection = null;
         if (! config.contains(configPrefix) || ! config.contains(configEnable)) {
-            return true;
+            return false;
         }
 
         if (! config.isBoolean(configEnable)) {
             logger.warning("'%s' is not a boolean.", configEnable);
-            return false;
+            return true;
         }
 
         if (! config.getBoolean(configEnable)) {
-            return true;
+            return false;
         }
 
         if (! config.contains(configDebug) || ! config.contains(configDebug)) {
@@ -69,12 +69,12 @@ public class Database {
 
         if (! config.contains(configHost)) {
             logger.warning("'%s' is not configured.", configHost);
-            return false;
+            return true;
         }
 
         if (! config.contains(configDatabase)) {
             logger.warning("%s is not configured.", configDatabase);
-            return false;
+            return true;
         }
 
         Properties connectionProperties = new Properties();
@@ -113,7 +113,7 @@ public class Database {
             connection = DriverManager.getConnection(url, connectionProperties);
         } catch (SQLException e) {
             logger.warning(e, "Failed to connect to %s.", url);
-            return false;
+            return true;
         }
 
         try {
@@ -146,10 +146,10 @@ public class Database {
         } catch (SQLException e) {
             logger.warning(e, "Failed to initialize database connection.");
             disable();
-            return false;
+            return true;
         }
 
-        return true;
+        return false;
     }
     
     public void disable() {

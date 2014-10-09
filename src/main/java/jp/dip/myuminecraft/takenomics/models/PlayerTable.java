@@ -50,7 +50,7 @@ public class PlayerTable {
 
     public boolean enable() {
         if (database == null) {
-            return false;
+            return true;
         }
 
         Connection connection = database.getConnection();            
@@ -77,7 +77,7 @@ public class PlayerTable {
                            + " table %s, version %d",
                            tableName, version);
                    disable();
-                   return false;
+                   return true;
                 }
             }
 
@@ -106,10 +106,10 @@ public class PlayerTable {
         } catch (SQLException e) {
             logger.warning(e, "Failed to initialize %s.", tableName);
             disable();
-            return false;
+            return true;
         }
         
-        return true;
+        return false;
     }
 
     void importFromOfflinePlayerList() throws SQLException {
