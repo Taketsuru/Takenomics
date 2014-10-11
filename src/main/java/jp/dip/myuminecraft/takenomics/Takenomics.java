@@ -43,6 +43,7 @@ public class Takenomics extends JavaPlugin {
     RedstoneTaxCollector  redstoneTaxCollector;
     ShopMonitor           chestShopMonitor;
     LivestockTaxCollector livestockTaxCollector;
+    EssentialsShopMonitor essentialsShopMonitor;
 
     @Override
     public void onEnable() {
@@ -103,6 +104,12 @@ public class Takenomics extends JavaPlugin {
                 chestShopMonitor = null;
             }
 
+            essentialsShopMonitor = new EssentialsShopMonitor
+                    (this, logger, database, shopTable, transactionTable);
+            if (essentialsShopMonitor.enable()) {
+                essentialsShopMonitor = null;
+            }
+            
             taxLogger = new TaxLogger(this);
             economy = getEconomyProvider();
             worldGuard = getWorldGuard();
