@@ -219,22 +219,22 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
             return true;
         }
 
-        int livestockHeadCount = info.untamedCount;
-        int petHeadCount = info.tamedCount;
+        int untamedCount = info.untamedCount;
+        int tamedCount = info.tamedCount;
 
-        double livestockRate = untamedTaxTable.getRate(livestockHeadCount);
-        double petRate = tamedTaxTable.getRate(petHeadCount);
-        double tax = Math.floor(livestockRate * livestockHeadCount + petRate * petHeadCount + info.arrears);
+        double untamedRate = untamedTaxTable.getRate(untamedCount);
+        double tamedRate = tamedTaxTable.getRate(tamedCount);
+        double tax = Math.floor(untamedRate * untamedCount + tamedRate * tamedCount + info.arrears);
         double balance = economy.getBalance(payer);
         double paid = Math.min(tax, Math.max(0.0, Math.floor(balance)));
 
-        if (payer.isOnline() && 0.0 < tax) {
+        if (payer.isOnline() && (0.0 < tax || 0 < untamedCount + tamedCount)) {
             Player player = (Player)payer;
             messages.send(player, "mobTaxNoticeHeader");
-            messages.send(player, "mobTaxNoticeLivestockCount", livestockHeadCount);
-            messages.send(player, "mobTaxNoticeLivestockRate", livestockRate);
-            messages.send(player, "mobTaxNoticePetCount", petHeadCount);
-            messages.send(player, "mobTaxNoticePetRate", petRate);
+            messages.send(player, "mobTaxNoticeLivestockCount", untamedCount);
+            messages.send(player, "mobTaxNoticeLivestockRate", untamedRate);
+            messages.send(player, "mobTaxNoticePetCount", tamedCount);
+            messages.send(player, "mobTaxNoticePetRate", tamedRate);
             if (0.0 < info.arrears) {
                 messages.send(player, "mobTaxNoticeArrears", info.arrears);
             }
@@ -243,7 +243,7 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
 
         if (0.0 < paid || 0.0 < info.arrears) {
             taxLogger.put(new LivestockTaxRecord(System.currentTimeMillis(),
-                    payer, livestockHeadCount, petHeadCount, info.arrears, paid));
+                    payer, untamedCount, tamedCount, info.arrears, paid));
         }
 
         economy.withdrawPlayer(payer, paid);
