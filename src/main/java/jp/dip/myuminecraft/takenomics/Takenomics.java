@@ -1,11 +1,14 @@
 package jp.dip.myuminecraft.takenomics;
 
+import java.sql.SQLException;
 import java.util.IllformedLocaleException;
 import java.util.Locale;
 
 import jp.dip.myuminecraft.takenomics.listeners.PlayerJoinQuitListener;
+import jp.dip.myuminecraft.takenomics.listeners.SignScanListener;
 import jp.dip.myuminecraft.takenomics.models.AccessLog;
 import jp.dip.myuminecraft.takenomics.models.PlayerTable;
+import jp.dip.myuminecraft.takenomics.models.ShopTable;
 import jp.dip.myuminecraft.takenomics.models.WorldTable;
 import net.milkbowl.vault.economy.Economy;
 
@@ -13,14 +16,13 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.event.Listener;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import com.sk89q.worldguard.bukkit.WorldGuardPlugin;
 
-public class Takenomics extends JavaPlugin implements Listener {
+public class Takenomics extends JavaPlugin {
 
     Logger                logger;
     Messages              messages;
@@ -30,14 +32,15 @@ public class Takenomics extends JavaPlugin implements Listener {
     PlayerTable           playerTable;
     WorldTable            worldTable;
     AccessLog             accessLog;
+    ShopTable             shopTable;
     TaxLogger             taxLogger;
     Economy               economy;
     WorldGuardPlugin      worldGuard;
     RegionManager         regionManager;
     TaxOnSavingsCollector taxOnSavingsCollector;
     RedstoneTaxCollector  redstoneTaxCollector;
-    ShopMonitor      chestShopMonitor;
-    LivestockTaxCollector mobTaxCollector;
+    ShopMonitor           chestShopMonitor;
+    LivestockTaxCollector livestockTaxCollector;
 
     @Override
     public void onEnable() {
@@ -74,15 +77,22 @@ public class Takenomics extends JavaPlugin implements Listener {
             if (accessLog.enable()) {
                 accessLog = null;
             } else {
-                getServer().getPluginManager().registerEvents
-                (new PlayerJoinQuitListener(logger, playerTable, accessLog), this);
+                getServer().getPluginManager().registerEvents(
+                        new PlayerJoinQuitListener(logger, playerTable, accessLog), this);
+            }
+
+            shopTable = new ShopTable(this, logger, database, playerTable, worldTable);
+            if (shopTable.enable()) {
+                shopTable = null;
+            } else {
+                getServer().getPluginManager().registerEvents(
+                        new SignScanListener(this, logger, database, shopTable), this);                
+                registerShopCommands();
             }
 
             chestShopMonitor = new ShopMonitor
-                    (this, logger, commandDispatcher,
-                            database, playerTable, worldTable);
+                    (this, logger, database, playerTable, worldTable, shopTable);
             if (chestShopMonitor.enable()) {
-                logger.warning("Disable shop monitor.");
                 chestShopMonitor = null;
             }
 
@@ -99,14 +109,12 @@ public class Takenomics extends JavaPlugin implements Listener {
                     (this, logger, messages, taxLogger, economy, regionManager);
             redstoneTaxCollector.enable();
             
-            mobTaxCollector = new LivestockTaxCollector
+            livestockTaxCollector = new LivestockTaxCollector
                     (this, logger, messages, database, taxLogger, regionManager, economy);
-            mobTaxCollector.enable();
+            livestockTaxCollector.enable();
+
         } catch (Throwable th) {
-            getLogger().severe(th.toString());
-            for (StackTraceElement e : th.getStackTrace()) {
-                getLogger().severe(e.toString());
-            }
+            logger.warning(th, "Failed to initialize %s", getName());
             getServer().getPluginManager().disablePlugin(this);
         }
     }
@@ -123,6 +131,23 @@ public class Takenomics extends JavaPlugin implements Listener {
                 return true;
             }
         }); 
+    }
+
+    void registerShopCommands() {
+        CommandDispatcher shopCommands= new CommandDispatcher(commandDispatcher, "shops");
+
+        shopCommands.addCommand("scrub", new CommandExecutor() {
+            @Override
+            public boolean onCommand(CommandSender sender, Command arg1,
+                    String arg2, String[] arg3) {
+                try {
+                    shopTable.runScrubTransaction();
+                } catch (SQLException e) {
+                    logger.warning(e, "failed to scrub shop table.");
+                }
+                return true;
+            }
+        });
     }
 
     Locale getLocale() {
@@ -173,9 +198,9 @@ public class Takenomics extends JavaPlugin implements Listener {
     
     @Override
     public void onDisable() {
-        if (mobTaxCollector != null) {
-            mobTaxCollector.disable();
-            mobTaxCollector = null;
+        if (livestockTaxCollector != null) {
+            livestockTaxCollector.disable();
+            livestockTaxCollector = null;
         }
 
         if (redstoneTaxCollector != null) {
