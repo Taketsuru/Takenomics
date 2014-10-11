@@ -16,6 +16,7 @@ import java.util.UUID;
 import jp.dip.myuminecraft.takenomics.models.PlayerTable;
 import jp.dip.myuminecraft.takenomics.models.ShopTable;
 import jp.dip.myuminecraft.takenomics.models.ShopTable.Shop;
+import jp.dip.myuminecraft.takenomics.models.TransactionTable;
 import jp.dip.myuminecraft.takenomics.models.WorldTable;
 
 import org.bukkit.Chunk;
@@ -62,21 +63,24 @@ public class ShopMonitor implements Listener, ShopValidator {
     PlayerTable             playerTable;
     WorldTable              worldTable;
     ShopTable               shopTable;
-    String                  transactionTableName;
-    PreparedStatement       insertTransaction;
+    TransactionTable        transactionTable;
 
     public ShopMonitor(JavaPlugin plugin, final Logger logger, Database database,
-            PlayerTable playerTable, WorldTable worldTable, final ShopTable shopTable) {
+            PlayerTable playerTable, WorldTable worldTable,
+            ShopTable shopTable, TransactionTable transactionTable) {
         this.plugin = plugin;
         this.logger = logger;
         this.database = database;
         this.playerTable = playerTable;
         this.worldTable = worldTable;
         this.shopTable = shopTable;
+        this.transactionTable = transactionTable;
     }
 
     public boolean enable() {
-        if (database == null || playerTable == null || worldTable == null || shopTable == null) {
+        if (database == null || playerTable == null
+                || worldTable == null || shopTable == null
+                || transactionTable == null) {
             logger.warning("No database connection.  Disabled chestshop monitor.");
             return true;
         }
@@ -87,18 +91,6 @@ public class ShopMonitor implements Listener, ShopValidator {
             return true;
         }
 
-        String tablePrefix = database.getTablePrefix();
-        transactionTableName = tablePrefix + "transactions";
-
-        try {
-            createTransactionTableIfNecessary();
-            prepareStatements();
-        } catch (SQLException e) {
-            logger.warning(e, "Failed to initialize ChestShop monitor.");
-            disable();
-            return true;
-        }
-        
         shopTable.addValidator(this);
 
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
@@ -166,65 +158,20 @@ public class ShopMonitor implements Listener, ShopValidator {
                 sellPrice, stock, purchasableQuantity);
     }
 
-    void createTransactionTableIfNecessary() throws SQLException {
-        Connection connection = database.getConnection();
-        try (Statement statement = connection.createStatement()) {
-            statement.execute(String.format("CREATE TABLE IF NOT EXISTS %s ("
-                    + "id INT UNSIGNED AUTO_INCREMENT NOT NULL,"
-                    + "timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,"
-                    + "shop SMALLINT UNSIGNED NOT NULL,"
-                    + "player MEDIUMINT UNSIGNED NOT NULL,"
-                    + "type ENUM('buy', 'sell') NOT NULL,"
-                    + "quantity SMALLINT NOT NULL," + "PRIMARY KEY (id),"
-                    + "FOREIGN KEY (shop) REFERENCES %s (id),"
-                    + "FOREIGN KEY (player) REFERENCES %s (id)" + ")",
-                    transactionTableName, shopTable.getTableName(),
-                    playerTable.getTableName()));
-        }
-    }
-
-    void prepareStatements() throws SQLException {
-        Connection connection = database.getConnection();
-
-        insertTransaction = connection.prepareStatement(String.format(
-                "INSERT INTO %s VALUES (NULL,NULL,?,?,?,?)",
-                transactionTableName));
-    }
-
     public void disable() {
         if (shopTable != null) {
             shopTable.removeValidator(this);
-        }
-
-        transactionTableName = null;
-
-        if (insertTransaction != null) {
-            try {
-                insertTransaction.close();
-            } catch (SQLException e) {
-            }
-            insertTransaction = null;
         }
     }
 
     @EventHandler
     void onShopCreatedEvent(ShopCreatedEvent event) {
         try {
-            final Shop row = newShop(event.getSign(), event.getSignLines());
+            final Shop shop = newShop(event.getSign(), event.getSignLines());
             database.runAsynchronously(new Runnable() {
                 public void run() {
                     try {
-                        Connection connection = database.getConnection();
-                        connection.setAutoCommit(false);
-                        try {
-                            shopTable.put(row);
-                            connection.commit();
-                        } catch (SQLException e) {
-                            connection.rollback();
-                            throw e;
-                        } finally {
-                            connection.setAutoCommit(true);
-                        }
+                        shopTable.put(shop);
                     } catch (SQLException e) {
                         logger.warning(e, "Failed to enter a shop record.");
                     }
@@ -256,17 +203,18 @@ public class ShopMonitor implements Listener, ShopValidator {
     @EventHandler
     void onTransactionEvent(TransactionEvent event) {
         try {
-            final Shop row = newShop(event.getSign(), event.getSign().getLines());
-            final int amount = event.getStock()[0].getAmount();
+            final Shop shop = newShop(
+                    event.getSign(), event.getSign().getLines());
+            final UUID playerId = event.getClient().getUniqueId();
             final TransactionType type = event.getTransactionType();
-            final int playerId = playerTable.getId(event.getClient().getUniqueId());
+            final int amount = event.getStock()[0].getAmount();
             database.runAsynchronously(new Runnable() {
                 public void run() {
                     try {
-                        insertTransactionRecord(row, playerId, type, amount);
+                        transactionTable.put(shop, playerId, type, amount);
                     } catch (SQLException e) {
                         logger.warning(e,
-                                "Failed to insert transaction record.");
+                                "Failed to enter a transaction record.");
                     }
                 }
             });
@@ -275,31 +223,7 @@ public class ShopMonitor implements Listener, ShopValidator {
         }
     }
 
-    void insertTransactionRecord(Shop row, int playerId,
-            TransactionType type, int amount) throws SQLException {
-        Connection connection = database.getConnection();
-        try (Statement statement = connection.createStatement()) {
-            connection.setAutoCommit(false);
-
-            shopTable.put(row);
-
-            int shopId = shopTable.getId(row.world, row.x, row.y, row.z);
-            insertTransaction.setInt(1, shopId);
-            insertTransaction.setInt(2, playerId);
-            insertTransaction.setString(3, type.toString().toLowerCase());
-            insertTransaction.setInt(4, amount);
-            insertTransaction.executeUpdate();
-
-            connection.commit();
-        } catch (SQLException e) {
-            connection.rollback();
-            throw e;
-        } finally {
-            connection.setAutoCommit(true);
-        }
-    }
-
-    static final BlockFace chestFaces[] = { BlockFace.SOUTH, BlockFace.WEST,
+     static final BlockFace chestFaces[] = { BlockFace.SOUTH, BlockFace.WEST,
             BlockFace.NORTH, BlockFace.EAST, BlockFace.UP, BlockFace.DOWN };
 
     @EventHandler
@@ -322,35 +246,25 @@ public class ShopMonitor implements Listener, ShopValidator {
             return;
         }
 
-        final Connection connection = database.getConnection();
-
+        final ArrayList<Shop> rows = new ArrayList<Shop>();
         try {
-            final ArrayList<Shop> rows = new ArrayList<Shop>();
             for (Sign sign : signs) {
                 rows.add(newShop(sign, sign.getLines()));
             }
-
-            database.runAsynchronously(new Runnable() {
-                public void run() {
-                    try {
-                        try {
-                            connection.setAutoCommit(false);
-
-                            shopTable.put(rows);
-
-                            connection.commit();
-                        } finally {
-                            connection.setAutoCommit(true);
-                        }
-
-                    } catch (SQLException e) {
-                        logger.warning(e, "Failed to enter a shop record.");
-                    }
-                }
-            });
-        } catch (Exception e) {
+        } catch (SQLException | UnknownPlayerException e) {
             logger.warning(e, "Failed to enter a shop record.");
+            return;
         }
+
+        database.runAsynchronously(new Runnable() {
+            public void run() {
+                try {
+                    shopTable.put(rows);
+                } catch (SQLException e) {
+                    logger.warning(e, "Failed to enter a shop record.");
+                }
+            }
+        });
     }
 
     void addAttachingChestShopSigns(Chest chest, Set<Sign> target) {

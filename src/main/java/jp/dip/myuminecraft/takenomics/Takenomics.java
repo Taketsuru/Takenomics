@@ -9,6 +9,7 @@ import jp.dip.myuminecraft.takenomics.listeners.SignScanListener;
 import jp.dip.myuminecraft.takenomics.models.AccessLog;
 import jp.dip.myuminecraft.takenomics.models.PlayerTable;
 import jp.dip.myuminecraft.takenomics.models.ShopTable;
+import jp.dip.myuminecraft.takenomics.models.TransactionTable;
 import jp.dip.myuminecraft.takenomics.models.WorldTable;
 import net.milkbowl.vault.economy.Economy;
 
@@ -33,6 +34,7 @@ public class Takenomics extends JavaPlugin {
     WorldTable            worldTable;
     AccessLog             accessLog;
     ShopTable             shopTable;
+    TransactionTable      transactionTable;
     TaxLogger             taxLogger;
     Economy               economy;
     WorldGuardPlugin      worldGuard;
@@ -89,9 +91,14 @@ public class Takenomics extends JavaPlugin {
                         new SignScanListener(this, logger, database, shopTable), this);                
                 registerShopCommands();
             }
+            
+            transactionTable = new TransactionTable(this, logger, database, playerTable, shopTable);
+            if (transactionTable.enable()) {
+                transactionTable = null;
+            }
 
             chestShopMonitor = new ShopMonitor
-                    (this, logger, database, playerTable, worldTable, shopTable);
+                    (this, logger, database, playerTable, worldTable, shopTable, transactionTable);
             if (chestShopMonitor.enable()) {
                 chestShopMonitor = null;
             }

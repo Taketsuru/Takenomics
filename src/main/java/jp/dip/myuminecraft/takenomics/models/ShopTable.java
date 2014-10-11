@@ -165,27 +165,47 @@ public class ShopTable {
     }
 
     public void put(Shop shop) throws SQLException {
-        setInsertShopParams(shop, insertIntoTemporary);
-        insertIntoTemporary.executeUpdate();
-        deleteObsoleteShops.executeUpdate();
-        replaceShops.executeUpdate();
-        truncateTemporary.executeUpdate();
+        Connection connection = database.getConnection();
+        connection.setAutoCommit(false);
+        try {
+            setInsertShopParams(shop, insertIntoTemporary);
+            insertIntoTemporary.executeUpdate();
+            deleteObsoleteShops.executeUpdate();
+            replaceShops.executeUpdate();
+            truncateTemporary.executeUpdate();
+            connection.commit();
+        } catch (SQLException e) {
+            connection.rollback();
+            throw e;
+        } finally {
+            connection.setAutoCommit(true);
+        }
     }
 
     public void put(Collection<Shop> shops) throws SQLException {
-        int batchSize = 0;
-        for (Shop shop : shops) {
-            setInsertShopParams(shop, insertIntoTemporary);
-            insertIntoTemporary.addBatch();
-            if (maxBatchSize <= ++batchSize) {
-                insertIntoTemporary.executeBatch();
-                batchSize = 0;
+        Connection connection = database.getConnection();
+        connection.setAutoCommit(false);
+        try {
+            int batchSize = 0;
+            for (Shop shop : shops) {
+                setInsertShopParams(shop, insertIntoTemporary);
+                insertIntoTemporary.addBatch();
+                if (maxBatchSize <= ++batchSize) {
+                    insertIntoTemporary.executeBatch();
+                    batchSize = 0;
+                }
             }
+            insertIntoTemporary.executeBatch();
+            deleteObsoleteShops.executeUpdate();
+            replaceShops.executeUpdate();
+            truncateTemporary.executeUpdate();
+            connection.commit();
+        } catch (SQLException e) {
+            connection.rollback();
+            throw e;
+        } finally {
+            connection.setAutoCommit(true);
         }
-        insertIntoTemporary.executeBatch();
-        deleteObsoleteShops.executeUpdate();
-        replaceShops.executeUpdate();
-        truncateTemporary.executeUpdate();
     }
 
     public void remove(String world, int x, int y, int z) throws SQLException {
@@ -219,10 +239,9 @@ public class ShopTable {
     public void runScrubTransaction() throws SQLException {
         Server server = plugin.getServer();
         Connection connection = database.getConnection();
+        connection.setAutoCommit(false);
 
         try (Statement stmt = connection.createStatement()) {
-
-            connection.setAutoCommit(false);
 
             int batchSize = 0;
             try (ResultSet rs = stmt
@@ -262,9 +281,9 @@ public class ShopTable {
                 scrubShops.executeUpdate();
                 replaceShops.executeUpdate();
                 truncateTemporary.executeUpdate();
-
-                connection.commit();
             }
+
+            connection.commit();
         } catch (Throwable t) {
             connection.rollback();
             throw t;
@@ -277,7 +296,6 @@ public class ShopTable {
             int chunkX, int chunkZ, Collection<BlockState> states)
             throws SQLException {
         Connection connection = database.getConnection();
-
         connection.setAutoCommit(false);
 
         try {
