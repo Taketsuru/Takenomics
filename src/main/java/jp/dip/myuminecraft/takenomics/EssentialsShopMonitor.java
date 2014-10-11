@@ -132,14 +132,6 @@ public class EssentialsShopMonitor implements Listener, ShopValidator {
             return null;
         }
 
-        String lines[] = ((Sign)state).getLines();
-        logger.info("ess validate %s:%d,%d,%d %s %s %s %s",
-                state.getWorld().getName(),
-                state.getX(), state.getY(), state.getZ(),
-                lines[0],
-                lines[1],
-                lines[2],
-                lines[3]);
         try {
             return newShop(state.getWorld(), state.getX(), state.getY(), state.getZ(),
                     ((Sign)state).getLines());
