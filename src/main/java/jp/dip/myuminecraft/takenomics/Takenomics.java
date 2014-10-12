@@ -6,6 +6,7 @@ import java.util.Locale;
 
 import jp.dip.myuminecraft.takenomics.listeners.PlayerJoinQuitListener;
 import jp.dip.myuminecraft.takenomics.listeners.SignScanListener;
+import jp.dip.myuminecraft.takenomics.listeners.UserBalanceUpdateListener;
 import jp.dip.myuminecraft.takenomics.models.AccessLog;
 import jp.dip.myuminecraft.takenomics.models.PlayerTable;
 import jp.dip.myuminecraft.takenomics.models.ShopTable;
@@ -49,7 +50,10 @@ public class Takenomics extends JavaPlugin {
     public void onEnable() {
         try {
             saveDefaultConfig();
-            
+
+            worldGuard = getWorldGuard();
+            economy = getEconomyProvider();
+
             logger = new Logger(getLogger());
             messages = new Messages(getLocale());
             
@@ -66,9 +70,14 @@ public class Takenomics extends JavaPlugin {
                 database = null;
             }
 
-            playerTable = new PlayerTable(this, logger, database);
+            playerTable = new PlayerTable(this, logger, database, economy);
             if (playerTable.enable()) {
                 playerTable = null;
+            } else {
+                getServer().getPluginManager().registerEvents(
+                        new UserBalanceUpdateListener(
+                                this, logger, database, playerTable),
+                        this);
             }
  
             worldTable = new WorldTable(this, logger, database);
@@ -111,8 +120,6 @@ public class Takenomics extends JavaPlugin {
             }
             
             taxLogger = new TaxLogger(this);
-            economy = getEconomyProvider();
-            worldGuard = getWorldGuard();
             regionManager = new RegionManager(this, logger, playerTable, worldGuard);
 
             taxOnSavingsCollector = new TaxOnSavingsCollector
@@ -156,7 +163,7 @@ public class Takenomics extends JavaPlugin {
                     String arg2, String[] arg3) {
                 try {
                     shopTable.runScrubTransaction();
-                } catch (SQLException e) {
+                } catch (SQLException | UnknownPlayerException e) {
                     logger.warning(e, "failed to scrub shop table.");
                 }
                 return true;

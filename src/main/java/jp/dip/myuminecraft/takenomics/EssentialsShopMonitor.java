@@ -93,7 +93,7 @@ public class EssentialsShopMonitor implements Listener, ShopValidator {
                 public void run() {
                     try {
                         shopTable.put(shop);
-                    } catch (SQLException e) {
+                    } catch (SQLException | UnknownPlayerException e) {
                         logger.warning(e, "Failed to enter a shop record.");
                     }
                 }

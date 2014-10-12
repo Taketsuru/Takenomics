@@ -15,6 +15,7 @@ import jp.dip.myuminecraft.takenomics.Constants;
 import jp.dip.myuminecraft.takenomics.Database;
 import jp.dip.myuminecraft.takenomics.Logger;
 import jp.dip.myuminecraft.takenomics.ShopValidator;
+import jp.dip.myuminecraft.takenomics.UnknownPlayerException;
 
 import org.bukkit.Server;
 import org.bukkit.World;
@@ -164,7 +165,7 @@ public class ShopTable {
         }
     }
 
-    public void put(Shop shop) throws SQLException {
+    public void put(Shop shop) throws SQLException, UnknownPlayerException {
         Connection connection = database.getConnection();
         connection.setAutoCommit(false);
         try {
@@ -182,7 +183,7 @@ public class ShopTable {
         }
     }
 
-    public void put(Collection<Shop> shops) throws SQLException {
+    public void put(Collection<Shop> shops) throws SQLException, UnknownPlayerException {
         Connection connection = database.getConnection();
         connection.setAutoCommit(false);
         try {
@@ -236,7 +237,7 @@ public class ShopTable {
         validators.remove(validator);
     }
 
-    public void runScrubTransaction() throws SQLException {
+    public void runScrubTransaction() throws SQLException, UnknownPlayerException {
         Server server = plugin.getServer();
         Connection connection = database.getConnection();
         connection.setAutoCommit(false);
@@ -453,8 +454,7 @@ public class ShopTable {
                         tableName));
     }
 
-
-    void setInsertShopParams(Shop row, PreparedStatement stmt) throws SQLException {
+    void setInsertShopParams(Shop row, PreparedStatement stmt) throws SQLException, UnknownPlayerException {
         stmt.clearParameters();
         stmt.setInt(1, row.x);
         stmt.setInt(2, row.z);

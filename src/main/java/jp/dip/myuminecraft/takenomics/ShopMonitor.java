@@ -1,15 +1,8 @@
 package jp.dip.myuminecraft.takenomics;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Types;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -19,19 +12,13 @@ import jp.dip.myuminecraft.takenomics.models.ShopTable.Shop;
 import jp.dip.myuminecraft.takenomics.models.TransactionTable;
 import jp.dip.myuminecraft.takenomics.models.WorldTable;
 
-import org.bukkit.Chunk;
 import org.bukkit.Material;
-import org.bukkit.Server;
-import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.Chest;
 import org.bukkit.block.DoubleChest;
 import org.bukkit.block.Sign;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
-import org.bukkit.command.CommandSender;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryCloseEvent;
@@ -172,12 +159,12 @@ public class ShopMonitor implements Listener, ShopValidator {
                 public void run() {
                     try {
                         shopTable.put(shop);
-                    } catch (SQLException e) {
+                    } catch (SQLException | UnknownPlayerException e) {
                         logger.warning(e, "Failed to enter a shop record.");
                     }
                 }
             });
-        } catch (Exception e) {
+        } catch (SQLException | UnknownPlayerException e) {
             logger.warning(e, "Failed to enter shop record.");
         }
     }
@@ -195,7 +182,7 @@ public class ShopMonitor implements Listener, ShopValidator {
                     }
                 }
             });
-        } catch (Exception e) {
+        } catch (SQLException | UnknownPlayerException e) {
             logger.warning(e, "Failed to delete shop record.");
         }
     }
@@ -212,13 +199,13 @@ public class ShopMonitor implements Listener, ShopValidator {
                 public void run() {
                     try {
                         transactionTable.put(shop, playerId, type, amount);
-                    } catch (SQLException e) {
+                    } catch (SQLException | UnknownPlayerException e) {
                         logger.warning(e,
                                 "Failed to enter a transaction record.");
                     }
                 }
             });
-        } catch (Exception e) {
+        } catch (SQLException | UnknownPlayerException e) {
             logger.warning(e, "Failed to delete shop record.");
         }
     }
@@ -260,7 +247,7 @@ public class ShopMonitor implements Listener, ShopValidator {
             public void run() {
                 try {
                     shopTable.put(rows);
-                } catch (SQLException e) {
+                } catch (SQLException | UnknownPlayerException e) {
                     logger.warning(e, "Failed to enter a shop record.");
                 }
             }

@@ -10,6 +10,7 @@ import java.util.UUID;
 
 import jp.dip.myuminecraft.takenomics.Database;
 import jp.dip.myuminecraft.takenomics.Logger;
+import jp.dip.myuminecraft.takenomics.UnknownPlayerException;
 
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -85,7 +86,7 @@ public class AccessLog {
                     insertEntry.setInt(1, playerTable.getId(uuid));
                     insertEntry.setString(2, type.toString().toLowerCase());
                     insertEntry.executeUpdate();
-                } catch (SQLException e) {
+                } catch (SQLException | UnknownPlayerException e) {
                     logger.warning(e, "Failed to put access log entry.");
                 }
             }

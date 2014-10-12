@@ -8,6 +8,7 @@ import java.util.UUID;
 
 import jp.dip.myuminecraft.takenomics.Database;
 import jp.dip.myuminecraft.takenomics.Logger;
+import jp.dip.myuminecraft.takenomics.UnknownPlayerException;
 import jp.dip.myuminecraft.takenomics.models.ShopTable.Shop;
 
 import org.bukkit.plugin.java.JavaPlugin;
@@ -64,7 +65,7 @@ public class TransactionTable {
     }
 
     public void put(Shop shop, UUID player, TransactionType type, int amount)
-            throws SQLException {
+            throws SQLException, UnknownPlayerException {
         Connection connection = database.getConnection();
 
         shopTable.put(shop);
