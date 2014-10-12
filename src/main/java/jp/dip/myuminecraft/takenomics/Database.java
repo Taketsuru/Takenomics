@@ -38,7 +38,6 @@ public class Database {
     public Database(JavaPlugin plugin, Logger logger) {
         this.plugin = plugin;
         this.logger = logger;
-        queue = new JobQueue(plugin, logger);
     }
 
     public boolean enable() {
@@ -149,11 +148,19 @@ public class Database {
             return true;
         }
 
+        queue = new JobQueue(plugin, logger);
+
         return false;
     }
     
     public void disable() {
+        if (queue == null) {
+            return;
+        }
+
         queue.drain();
+        queue = null;
+
 
         if (insertVersion != null) {
             try { insertVersion.close(); } catch (SQLException e) {}
@@ -224,7 +231,9 @@ public class Database {
     }
 
     public void runAsynchronously(Runnable runnable) {
-        queue.runAsynchronously(runnable);
+        if (queue != null) {
+            queue.runAsynchronously(runnable);
+        }
     }
 
     public static void toBytes(UUID uuid, byte[] result) {
