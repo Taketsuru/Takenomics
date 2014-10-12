@@ -33,7 +33,11 @@ public class RegionManager {
 
         for (String ownerName : region.getOwners().getPlayers()) {
             UUID uuid = playerTable.getUniqueIdForName(ownerName);
-            result.add(uuid);
+            if (uuid == null) {
+                logger.warning("RegionManager: unknown player: %s", ownerName);
+            } else {
+                result.add(uuid);
+            }
         }
 
         return result;
