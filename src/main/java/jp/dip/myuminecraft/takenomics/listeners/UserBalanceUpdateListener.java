@@ -9,7 +9,6 @@ import jp.dip.myuminecraft.takenomics.UnknownPlayerException;
 import jp.dip.myuminecraft.takenomics.models.PlayerTable;
 import net.ess3.api.events.UserBalanceUpdateEvent;
 
-import org.bukkit.OfflinePlayer;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.java.JavaPlugin;
