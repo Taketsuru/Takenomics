@@ -4,6 +4,8 @@ import java.sql.SQLException;
 import java.util.IllformedLocaleException;
 import java.util.Locale;
 
+import jp.dip.myuminecraft.takecore.Logger;
+import jp.dip.myuminecraft.takecore.Messages;
 import jp.dip.myuminecraft.takenomics.listeners.PlayerJoinQuitListener;
 import jp.dip.myuminecraft.takenomics.listeners.SignScanListener;
 import jp.dip.myuminecraft.takenomics.listeners.UserBalanceUpdateListener;
@@ -44,6 +46,7 @@ public class Takenomics extends JavaPlugin {
     RedstoneTaxCollector  redstoneTaxCollector;
     ShopMonitor           chestShopMonitor;
     LivestockTaxCollector livestockTaxCollector;
+    HopperTaxCollector    hopperTaxCollector;
     EssentialsShopMonitor essentialsShopMonitor;
 
     @Override
@@ -51,12 +54,12 @@ public class Takenomics extends JavaPlugin {
         try {
             saveDefaultConfig();
 
-            worldGuard = getWorldGuard();
-            economy = getEconomyProvider();
-
             logger = new Logger(getLogger());
             messages = new Messages(getLocale());
             
+            worldGuard = getWorldGuard();
+            economy = getEconomyProvider();
+
             commandDispatcher = new CommandDispatcher(messages, "takenomics.command.");
             getCommand("takenomics").setExecutor(commandDispatcher);
 
@@ -133,6 +136,10 @@ public class Takenomics extends JavaPlugin {
             livestockTaxCollector = new LivestockTaxCollector
                     (this, logger, messages, database, taxLogger, regionManager, economy);
             livestockTaxCollector.enable();
+
+            hopperTaxCollector = new HopperTaxCollector
+                    (this, logger, messages, taxLogger, economy, regionManager);
+            hopperTaxCollector.enable();
 
         } catch (Throwable th) {
             logger.warning(th, "Failed to initialize %s", getName());

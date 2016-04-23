@@ -11,6 +11,9 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import jp.dip.myuminecraft.takecore.Logger;
+import jp.dip.myuminecraft.takecore.Messages;
+
 public class TaxOnSavingsCollector extends PeriodicTaxCollector implements Listener {
 
     class Record extends TaxRecord {       

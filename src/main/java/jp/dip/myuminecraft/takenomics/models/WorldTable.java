@@ -8,8 +8,8 @@ import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Map;
 
+import jp.dip.myuminecraft.takecore.Logger;
 import jp.dip.myuminecraft.takenomics.Database;
-import jp.dip.myuminecraft.takenomics.Logger;
 
 import org.bukkit.World;
 import org.bukkit.plugin.java.JavaPlugin;

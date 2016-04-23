@@ -6,8 +6,8 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.UUID;
 
+import jp.dip.myuminecraft.takecore.Logger;
 import jp.dip.myuminecraft.takenomics.Database;
-import jp.dip.myuminecraft.takenomics.Logger;
 import jp.dip.myuminecraft.takenomics.UnknownPlayerException;
 import jp.dip.myuminecraft.takenomics.models.ShopTable.Shop;
 
@@ -40,6 +40,10 @@ public class TransactionTable {
     }
 
     public boolean enable() {
+        if (database == null) {
+            return true;
+        }
+
         String tablePrefix = database.getTablePrefix();
         tableName = tablePrefix + "transactions";
 

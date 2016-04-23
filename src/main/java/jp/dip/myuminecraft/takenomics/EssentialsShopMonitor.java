@@ -2,6 +2,7 @@ package jp.dip.myuminecraft.takenomics;
 
 import java.sql.SQLException;
 
+import jp.dip.myuminecraft.takecore.Logger;
 import jp.dip.myuminecraft.takenomics.models.ShopTable;
 import jp.dip.myuminecraft.takenomics.models.ShopTable.Shop;
 import jp.dip.myuminecraft.takenomics.models.TransactionTable;

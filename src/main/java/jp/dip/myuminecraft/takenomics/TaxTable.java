@@ -6,6 +6,8 @@ import java.util.Map;
 
 import org.bukkit.configuration.file.FileConfiguration;
 
+import jp.dip.myuminecraft.takecore.Logger;
+
 public class TaxTable {
 
     class TaxClass {

@@ -9,6 +9,8 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import jp.dip.myuminecraft.takecore.Logger;
+
 public abstract class PeriodicTaxCollector extends TaxCollector {
 
     enum State {
@@ -126,7 +128,7 @@ public abstract class PeriodicTaxCollector extends TaxCollector {
             
         case collecting:  
             long startTime = System.nanoTime();
-            long maxCollectionTime = 2 * 1000 * 1000; // 2ms
+            long maxCollectionTime = 10 * 1000 * 1000; // 10ms
             for (; nextPayer < payers.size(); ++nextPayer) {
     
                 if (maxCollectionTime <= System.nanoTime() - startTime) {

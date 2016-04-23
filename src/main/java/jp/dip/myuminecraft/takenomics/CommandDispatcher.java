@@ -8,6 +8,8 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
+import jp.dip.myuminecraft.takecore.Messages;
+
 public class CommandDispatcher implements CommandExecutor {
     
     class CommandInfo {

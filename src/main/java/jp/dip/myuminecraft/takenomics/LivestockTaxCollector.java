@@ -39,6 +39,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 
+import jp.dip.myuminecraft.takecore.Logger;
+import jp.dip.myuminecraft.takecore.Messages;
+
 public class LivestockTaxCollector extends PeriodicTaxCollector implements Listener {
 
     class LivestockTaxRecord extends TaxRecord {       

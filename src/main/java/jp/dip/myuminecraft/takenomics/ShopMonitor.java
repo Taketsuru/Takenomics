@@ -6,6 +6,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
+import jp.dip.myuminecraft.takecore.Logger;
 import jp.dip.myuminecraft.takenomics.models.PlayerTable;
 import jp.dip.myuminecraft.takenomics.models.ShopTable;
 import jp.dip.myuminecraft.takenomics.models.ShopTable.Shop;

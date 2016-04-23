@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import jp.dip.myuminecraft.takecore.Logger;
 import jp.dip.myuminecraft.takenomics.models.PlayerTable;
 
 import org.bukkit.Location;
@@ -29,7 +30,7 @@ public class RegionManager {
 
     public List<UUID> getOwners(ProtectedRegion region) {
         List<UUID> result = new ArrayList<UUID>();
-        //List<UUID> result = new ArrayList<UUID>(highest.getOwners().getUniqueIds());
+        //List<UUID> result = new ArrayList<UUID>(region.getOwners().getUniqueIds());
 
         for (String ownerName : region.getOwners().getPlayers()) {
             UUID uuid = playerTable.getUniqueIdForName(ownerName);

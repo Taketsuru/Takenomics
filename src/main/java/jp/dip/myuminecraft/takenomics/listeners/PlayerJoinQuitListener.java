@@ -2,7 +2,7 @@ package jp.dip.myuminecraft.takenomics.listeners;
 
 import java.sql.SQLException;
 
-import jp.dip.myuminecraft.takenomics.Logger;
+import jp.dip.myuminecraft.takecore.Logger;
 import jp.dip.myuminecraft.takenomics.models.AccessLog;
 import jp.dip.myuminecraft.takenomics.models.PlayerTable;
 
