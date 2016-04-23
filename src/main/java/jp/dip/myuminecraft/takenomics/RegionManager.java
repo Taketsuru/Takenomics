@@ -29,9 +29,8 @@ public class RegionManager {
     }
 
     public List<UUID> getOwners(ProtectedRegion region) {
-        List<UUID> result = new ArrayList<UUID>();
-        //List<UUID> result = new ArrayList<UUID>(region.getOwners().getUniqueIds());
-
+        List<UUID> result = new ArrayList<UUID>(
+                region.getOwners().getUniqueIds());
         for (String ownerName : region.getOwners().getPlayers()) {
             UUID uuid = playerTable.getUniqueIdForName(ownerName);
             if (uuid == null) {
@@ -47,8 +46,8 @@ public class RegionManager {
     public ProtectedRegion getHighestPriorityRegion(Location loc) {
         ProtectedRegion highest = null;
         int currentPriority = Integer.MIN_VALUE;
-        for (ProtectedRegion region
-                : worldGuard.getRegionManager(loc.getWorld()).getApplicableRegions(loc)) {
+        for (ProtectedRegion region : worldGuard
+                .getRegionManager(loc.getWorld()).getApplicableRegions(loc)) {
             int regionPriority = region.getPriority();
             if (currentPriority < regionPriority) {
                 highest = region;
