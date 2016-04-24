@@ -62,7 +62,7 @@ livestockTax:
 hopperTax:
   enable: true
   debug: false
-  internal: 600
+  interval: 600
   table:
   - min: 16
     rate: 100.0
