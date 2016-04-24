@@ -14,8 +14,8 @@
 				<artifactId>maven-compiler-plugin</artifactId>
 				<version>3.5.1</version>
 				<configuration>
-					<source>7</source>
-					<target>7</target>
+					<source>8</source>
+					<target>8</target>
 				</configuration>
 			</plugin>
 		</plugins>
@@ -34,22 +34,42 @@
 		</resources>
 	</build>
 	<repositories>
-	    <repository>
-    	    <id>spigot-repo</id>
-    	    <url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
-    	</repository>
+		<repository>
+			<id>spigot-repo</id>
+			<url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
+		</repository>
+		<repository>
+			<id>vault-repo</id>
+			<url>http://nexus.theyeticave.net/content/repositories/pub_releases</url>
+		</repository>
+		<repository>
+			<id>sk89q-repo</id>
+			<url>https://maven.sk89q.com/repo/</url>
+		</repository>
 	</repositories>
 	<dependencies>
-	    <dependency>
-	           <groupId>org.spigotmc</groupId>
-	           <artifactId>spigot-api</artifactId>
-	           <version>1.9.2-R0.1-SNAPSHOT</version>
-	           <scope>provided</scope>
-	    </dependency>
+		<dependency>
+			<groupId>jp.dip.myuminecraft</groupId>
+			<artifactId>TakeCore</artifactId>
+			<version>0.0.1</version>
+		</dependency>
+		<dependency>
+			<groupId>org.spigotmc</groupId>
+			<artifactId>spigot-api</artifactId>
+			<version>1.9-R0.1-SNAPSHOT</version>
+			<scope>provided</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.bukkit</groupId>
+			<artifactId>bukkit</artifactId>
+			<version>1.9-R0.1-SNAPSHOT</version>
+			<scope>provided</scope>
+		</dependency>
 		<dependency>
 			<groupId>net.milkbowl.vault</groupId>
 			<artifactId>VaultAPI</artifactId>
 			<version>1.6</version>
+			<scope>provided</scope>
 		</dependency>
 		<dependency>
 			<groupId>com.sk89q</groupId>
@@ -57,24 +77,14 @@
 			<version>6.1</version>
 		</dependency>
 		<dependency>
-			<groupId>com.sk89q</groupId>
-			<artifactId>worldedit</artifactId>
-			<version>6.1</version>
-		</dependency>
-		<dependency>
 			<groupId>com.acrobot.chestshop</groupId>
 			<artifactId>chestshop</artifactId>
-			<version>4.0-r4</version>
+			<version>4.0-r5</version>
 		</dependency>
 		<dependency>
 			<groupId>net.ess3</groupId>
 			<artifactId>Essentials</artifactId>
 			<version>2.X-SNAPSHOT</version>
-		</dependency>
-		<dependency>
-			<groupId>jp.dip.myuminecraft</groupId>
-			<artifactId>TakeCore</artifactId>
-			<version>0.0.1-SNAPSHOT</version>
 		</dependency>
 	</dependencies>
 </project>
