@@ -372,18 +372,9 @@ public class HopperTaxCollector extends PeriodicTaxCollector
         List<Location> hoppers = new ArrayList<Location>();
         assert !hopperLocations.containsKey(chunk);
 
-        for (int y = 0; y < Constants.chunkYSize; ++y) {
-            for (int z = 0; z < Constants.chunkZSize; ++z) {
-                for (int x = 0; x < Constants.chunkXSize; ++x) {
-                    Block block = chunk.getBlock(x, y, z);
-                    switch (block.getType()) {
-                    case HOPPER:
-                        hoppers.add(block.getLocation());
-                        break;
-                    default:
-                        break;
-                    }
-                }
+        for (BlockState state : chunk.getTileEntities()) {
+            if (state instanceof Hopper) {
+                hoppers.add(state.getLocation());
             }
         }
 
