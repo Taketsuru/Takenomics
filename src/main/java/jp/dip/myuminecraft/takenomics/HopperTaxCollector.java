@@ -83,6 +83,7 @@ public class HopperTaxCollector extends PeriodicTaxCollector
     Map<Chunk, List<Location>> hopperLocations;
     Iterator<List<Location>>   chunksWithHoppersIter;
     Iterator<Location>         hoppersInChunkIter;
+    boolean                    investigating;
 
     public HopperTaxCollector(JavaPlugin plugin, Logger logger,
             Messages messages, TaxLogger taxLogger, Economy economy,
@@ -98,6 +99,7 @@ public class HopperTaxCollector extends PeriodicTaxCollector
         hopperLocations = new HashMap<Chunk, List<Location>>();
         chunksWithHoppersIter = null;
         hoppersInChunkIter = null;
+        investigating = false;
     }
 
     public void enable() {
@@ -137,7 +139,6 @@ public class HopperTaxCollector extends PeriodicTaxCollector
     public void onChunkUnloadEvent(ChunkUnloadEvent event) {
         Chunk chunk = event.getChunk();
         if (hopperLocations.remove(chunk) != null) {
-            logger.info("restart by chunk unload");
             restartInvestigation();
         }
     }
@@ -149,7 +150,6 @@ public class HopperTaxCollector extends PeriodicTaxCollector
             return;
         }
 
-        logger.info("shouldBlockPlacement hopper");
         Location location = block.getLocation();
         ProtectedRegion region = regionManager
                 .getHighestPriorityRegion(location);
@@ -160,7 +160,6 @@ public class HopperTaxCollector extends PeriodicTaxCollector
         }
 
         if (taxFreeRegions.contains(region.getId())) {
-            logger.info("taxExempt");
             return;
         }
 
@@ -187,7 +186,6 @@ public class HopperTaxCollector extends PeriodicTaxCollector
             return;
         }
 
-        logger.info("didBlockPlacement hopper");
         Chunk chunk = block.getChunk();
         List<Location> list = hopperLocations.get(chunk);
         if (list == null) {
@@ -196,7 +194,6 @@ public class HopperTaxCollector extends PeriodicTaxCollector
         }
         list.add(block.getLocation());
 
-        logger.info("restart by hopper placement");
         restartInvestigation();
     }
 
@@ -207,23 +204,18 @@ public class HopperTaxCollector extends PeriodicTaxCollector
             return;
         }
 
-        logger.info("HopperTaxManager::didBlockBreak");
-
         Chunk chunk = block.getChunk();
         List<Location> list = hopperLocations.get(chunk);
         if (list == null) {
-            logger.info("already empty");
             return;
         }
 
-        logger.info("size %d", list.size());
         if (list.size() == 1) {
             hopperLocations.remove(chunk);
         } else {
             list.remove(block.getLocation());
         }
 
-        logger.info("restart by hopper break");
         restartInvestigation();
     }
 
@@ -258,13 +250,13 @@ public class HopperTaxCollector extends PeriodicTaxCollector
 
     @Override
     protected boolean prepareCollection() {
-        logger.info("prepareCollection");
+        investigating = true;
+
         long startTime = System.nanoTime();
         long maxCollectionTime = 10 * 1000 * 1000; // 10ms
         boolean result = false;
         while (!result && System.nanoTime() - startTime < maxCollectionTime) {
             result = investigate();
-            logger.info("investigate %s", result);
         }
 
         if (result) {
@@ -274,16 +266,14 @@ public class HopperTaxCollector extends PeriodicTaxCollector
                     addPayer(server.getOfflinePlayer(entry.getKey()));
                 }
             }
+            investigating = false;
         }
 
-        logger.info("prepareCollection %s %d", result,
-                (System.nanoTime() - startTime) / 1000);
         return result;
     }
 
     @Override
     protected boolean collect(OfflinePlayer payer) {
-        logger.info("collect %s", payer.getName());
         UUID payerId = payer.getUniqueId();
         PayerInfo info = payersTable.get(payerId);
         long charge = info.hoppers.size();
@@ -299,8 +289,9 @@ public class HopperTaxCollector extends PeriodicTaxCollector
         }
 
         logger.info(
-                "count %d, rate %g, arrears %g, tax %g, balance %g, penalty %d",
-                charge, rate, arrears, tax, balance, penalty);
+                "hopper tax: player %s, count %d, rate %g, "
+                        + "arrears %g, tax %g, balance %g, penalty %d",
+                payer.getName(), charge, rate, arrears, tax, balance, penalty);
 
         double paid = 0.0;
         if (balance <= 0.0) {
@@ -340,10 +331,19 @@ public class HopperTaxCollector extends PeriodicTaxCollector
                     payer, charge, rate, arrears, paid));
         }
 
+        boolean showSeisuredHopper = penalty < 8;
         for (Location location : info.hoppers) {
             if (penalty == 0) {
                 break;
             }
+            if (showSeisuredHopper && onlinePlayer != null) {
+                messages.send(onlinePlayer, "seisuredHopperLocation",
+                        location.getWorld().getName(), location.getBlockX(),
+                        location.getBlockY(), location.getBlockZ());
+            }
+            logger.info("seisured hopper @ %s:%d,%d,%d",
+                    location.getWorld().getName(), location.getBlockX(),
+                    location.getBlockY(), location.getBlockZ());
             removeHopper(location);
             --penalty;
         }
@@ -360,7 +360,9 @@ public class HopperTaxCollector extends PeriodicTaxCollector
     }
 
     void restartInvestigation() {
-        logger.info("restartInvestigation");
+        if (!investigating) {
+            return;
+        }
         chunksWithHoppersIter = null;
         hoppersInChunkIter = null;
         for (PayerInfo payer : payersTable.values()) {
@@ -385,14 +387,11 @@ public class HopperTaxCollector extends PeriodicTaxCollector
     }
 
     boolean investigate() {
-        logger.info("investigate");
         while (hoppersInChunkIter == null || !hoppersInChunkIter.hasNext()) {
-            logger.info("next hoppersInChunkIter");
             hoppersInChunkIter = null;
 
             if (chunksWithHoppersIter == null) {
                 chunksWithHoppersIter = hopperLocations.values().iterator();
-                logger.info("init chunksWithHopperIter");
             }
 
             if (!chunksWithHoppersIter.hasNext()) {
@@ -404,8 +403,6 @@ public class HopperTaxCollector extends PeriodicTaxCollector
         }
 
         Location location = hoppersInChunkIter.next();
-
-        logger.info("location %s, chunk %s", location, location.getChunk());
 
         ProtectedRegion region = regionManager
                 .getHighestPriorityRegion(location);
@@ -429,18 +426,14 @@ public class HopperTaxCollector extends PeriodicTaxCollector
             payersTable.put(primaryOwner, info);
         }
 
-        logger.info("payer %s", primaryOwner);
         info.hoppers.add(location);
 
         return false;
     }
 
     void removeHopper(Location location) {
-        logger.info("removeHopper %s", location);
-
         Block block = location.getBlock();
         if (block.getType() != Material.HOPPER) {
-            logger.info("not a hopper");
             return;
         }
 
@@ -471,10 +464,9 @@ public class HopperTaxCollector extends PeriodicTaxCollector
 
         state = location.getBlock().getState();
         Inventory newInventory = ((Dropper) state).getInventory();
-        int n = Math.min(newInventory.getSize(), hopperInventorySize);
-        for (int i = 0; i < n; ++i) {
-            if (newContents[i] != null) {
-                newInventory.addItem(newContents[i]);
+        for (ItemStack stack : newContents) {
+            if (stack != null) {
+                newInventory.addItem(stack);
             }
         }
         state.update();
