@@ -1,8 +1,8 @@
 package jp.dip.myuminecraft.takenomics;
 
 import java.sql.SQLException;
-import java.util.IllformedLocaleException;
 import java.util.Locale;
+import java.util.ResourceBundle;
 
 import jp.dip.myuminecraft.takecore.Logger;
 import jp.dip.myuminecraft.takecore.Messages;
@@ -19,7 +19,6 @@ import net.milkbowl.vault.economy.Economy;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -55,8 +54,8 @@ public class Takenomics extends JavaPlugin {
             saveDefaultConfig();
 
             logger = new Logger(getLogger());
-            messages = new Messages(getLocale());
-            
+            Locale locale = Messages.getLocale(getConfig().getString("locale"));
+            messages = new Messages(ResourceBundle.getBundle("messages", locale), locale);
             worldGuard = getWorldGuard();
             economy = getEconomyProvider();
 
@@ -176,27 +175,6 @@ public class Takenomics extends JavaPlugin {
                 return true;
             }
         });
-    }
-
-    Locale getLocale() {
-        FileConfiguration config = getConfig();
-
-        String languageTag = config.getString("locale");
-        Locale result = null;
-        if (languageTag == null) {
-            logger.warning("Can't find locale configurations.");
-        } else {            
-            try {
-                result = new Locale.Builder().setLanguageTag(languageTag).build();
-            } catch (IllformedLocaleException e) {
-                logger.warning("Illegal locale '%s' is specified.", getName(), languageTag);
-           }
-        }
-        if (result == null) {
-            result = new Locale("en-US");               
-        }
-        
-        return result;
     }
 
     Economy getEconomyProvider() throws Exception {
