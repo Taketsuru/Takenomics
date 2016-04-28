@@ -18,6 +18,7 @@ import org.bukkit.Server;
 import org.bukkit.World;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Ageable;
+import org.bukkit.entity.AnimalTamer;
 import org.bukkit.entity.Animals;
 import org.bukkit.entity.Chicken;
 import org.bukkit.entity.Cow;
@@ -161,15 +162,15 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
             }
 
             Entity entity = entityIter.next();
-            OfflinePlayer payer = null;
             if (! (entity instanceof Animals)) {
                 continue;
             }
                    
+            OfflinePlayer payer = null;
             boolean tamed = entity instanceof Tameable && ((Tameable)entity).isTamed();
-            if (tamed) {
-                UUID owner = ((Tameable)entity).getOwner().getUniqueId();
-                payer = server.getOfflinePlayer(owner);
+            AnimalTamer owner = tamed ? ((Tameable)entity).getOwner() : null;
+            if (owner != null && owner instanceof OfflinePlayer) {
+                payer = server.getOfflinePlayer(owner.getUniqueId());
             } else {
                 payer = findLivestockTaxPayer(server, entity);
             }
