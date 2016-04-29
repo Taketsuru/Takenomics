@@ -29,18 +29,7 @@ public class RegionManager {
     }
 
     public List<UUID> getOwners(ProtectedRegion region) {
-        List<UUID> result = new ArrayList<UUID>(
-                region.getOwners().getUniqueIds());
-        for (String ownerName : region.getOwners().getPlayers()) {
-            UUID uuid = playerTable.getUniqueIdForName(ownerName);
-            if (uuid == null) {
-                logger.warning("RegionManager: unknown player: %s", ownerName);
-            } else {
-                result.add(uuid);
-            }
-        }
-
-        return result;
+        return new ArrayList<UUID>(region.getOwners().getUniqueIds());
     }
 
     public ProtectedRegion getHighestPriorityRegion(Location loc) {
