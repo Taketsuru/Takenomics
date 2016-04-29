@@ -43,11 +43,11 @@ public class HopperTaxCollector extends PeriodicTaxCollector
         implements Listener {
 
     private static class PayerInfo {
-        List<Location> hoppers;
-        double         arrears;
+        Set<Location> hoppers;
+        double        arrears;
 
         PayerInfo() {
-            hoppers = new ArrayList<Location>();
+            hoppers = new HashSet<Location>();
             arrears = 0.0;
         }
     }
@@ -348,15 +348,14 @@ public class HopperTaxCollector extends PeriodicTaxCollector
             --penalty;
         }
 
-        if (0.0 < arrears) {
-            info.hoppers.clear();
-            info.arrears = arrears;
-            return false;
+        info.hoppers.clear();
+        info.arrears = arrears;
+
+        if (arrears == 0.0) {
+            payersTable.remove(payerId);
         }
 
-        payersTable.remove(payerId);
-
-        return true;
+        return arrears == 0.0;
     }
 
     void restartInvestigation() {
@@ -433,11 +432,10 @@ public class HopperTaxCollector extends PeriodicTaxCollector
 
     void removeHopper(Location location) {
         Block block = location.getBlock();
+        hopperLocations.get(block.getChunk()).remove(location);
         if (block.getType() != Material.HOPPER) {
             return;
         }
-
-        hopperLocations.get(block.getChunk()).remove(location);
 
         BlockState state = block.getState();
         Inventory oldInventory = ((Hopper) state).getInventory();
