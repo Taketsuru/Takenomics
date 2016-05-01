@@ -7,9 +7,7 @@ log:
 database:
   enable: false
   debug: false
-  host: localhost
-  port: 3306
-  database: takenomics
+  url: jdbc:mysql://localhost:3306/takenomics
   tablePrefix: takenomics_
   user: root
   password: ''

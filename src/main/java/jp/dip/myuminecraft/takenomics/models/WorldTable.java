@@ -5,9 +5,13 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
+import jp.dip.myuminecraft.takecore.DatabaseTask;
 import jp.dip.myuminecraft.takecore.Logger;
 import jp.dip.myuminecraft.takenomics.Database;
 
@@ -22,7 +26,7 @@ public class WorldTable {
     Logger               logger;
     Database             database;
     String               tableName;
-    Map<String, Integer> cache                = new HashMap<String, Integer>();
+    Map<String, Integer> cache;
     PreparedStatement    insertEntry;
     PreparedStatement    findEntry;
 
@@ -30,8 +34,9 @@ public class WorldTable {
         this.plugin = plugin;
         this.logger = logger;
         this.database = database;
+        cache = Collections.synchronizedMap(new HashMap<String, Integer>());
     }
-    
+
     public String getTableName() {
         return tableName;
     }
@@ -42,32 +47,20 @@ public class WorldTable {
         }
 
         tableName = database.getTablePrefix() + "worlds";
-        Connection connection = database.getConnection();            
+
+        List<String> worldNames = new ArrayList<>();
+        for (World w : plugin.getServer().getWorlds()) {
+            worldNames.add(w.getName());
+        }
 
         try {
-
-            if (! database.hasTable(tableName)) {
-                createNewTable(tableName);
-            } else {
-                int version = database.getVersion(tableName);
-                if (currentSchemaVersion < version) {
-                    logger.warning("The schema version of %s is higher (%d) "
-                            + "than the current version (%d).",
-                            tableName, version, currentSchemaVersion);
-                    disable();
-                    return true;
+            database.submitSync(new DatabaseTask() {
+                @Override
+                public void run(Connection connection) throws Throwable {
+                    initializeTable(connection, worldNames);
                 }
-            }
-            
-            findEntry = connection.prepareStatement
-                    (String.format("SELECT id FROM %s WHERE name=?", tableName));
-            insertEntry = connection.prepareStatement
-                    (String.format("INSERT INTO %s VALUES (NULL,?)", tableName),
-                            Statement.RETURN_GENERATED_KEYS);
-
-            enterLoadedWorlds();
-
-        } catch (SQLException e) {
+            });
+        } catch (Throwable e) {
             logger.warning(e, "Failed to initialize worlds table.");
             disable();
             return true;
@@ -76,52 +69,78 @@ public class WorldTable {
         return false;
     }
 
-    void createNewTable(String tableName) throws SQLException {
-        Connection connection = database.getConnection();
-        try (Statement stmt = connection.createStatement()) {
-            stmt.execute(String.format
-                    ("CREATE TABLE %s ("
-                            + "id TINYINT UNSIGNED AUTO_INCREMENT NOT NULL,"
-                            + "name VARCHAR(50) CHARACTER SET ascii NOT NULL,"
-                            + "PRIMARY KEY (id),"
-                            + "UNIQUE (name))",
-                            tableName));
+    void initializeTable(Connection connection, List<String> worldNames)
+            throws Throwable {
+        if (!database.hasTable(connection, tableName)) {
+            createNewTable(connection, tableName);
 
+        } else {
+            int version = database.getVersion(connection, tableName);
+            switch (version) {
+
+            case currentSchemaVersion:
+                break;
+
+            default:
+                throw new Exception(String.format(
+                        "Unknown schema version: table %s, version %d",
+                        tableName, version));
+            }
+        }
+
+        findEntry = connection.prepareStatement(
+                String.format("SELECT id FROM %s WHERE name=?", tableName));
+        insertEntry = connection.prepareStatement(
+                String.format("INSERT INTO %s VALUES (NULL,?)", tableName),
+                Statement.RETURN_GENERATED_KEYS);
+
+        for (String worldName : worldNames) {
+            enter(connection, worldName);
         }
     }
 
-    void enterLoadedWorlds() throws SQLException {
-        for (World w : plugin.getServer().getWorlds()) {
-            enter(w.getName());
+    void createNewTable(Connection connection, String tableName)
+            throws SQLException {
+        try (Statement stmt = connection.createStatement()) {
+            stmt.execute(String.format(
+                    "CREATE TABLE %s ("
+                            + "id TINYINT UNSIGNED AUTO_INCREMENT NOT NULL,"
+                            + "name VARCHAR(50) CHARACTER SET ascii NOT NULL,"
+                            + "PRIMARY KEY (id)," + "UNIQUE (name))",
+                    tableName));
+
         }
     }
 
     public void disable() {
         cache.clear();
         if (findEntry != null) {
-            try { findEntry.close(); } catch (SQLException e) {}
+            try {
+                findEntry.close();
+            } catch (SQLException e) {
+            }
             findEntry = null;
         }
         if (insertEntry != null) {
-            try { insertEntry.close(); } catch (SQLException e) {}
+            try {
+                insertEntry.close();
+            } catch (SQLException e) {
+            }
             insertEntry = null;
         }
     }
 
-    public synchronized int getId(String name) throws SQLException {
-        synchronized (this) {
-            Integer id = cache.get(name);
-            if (id != null) {
-                return id;
-            }
+    public int getId(Connection connection, String name) throws SQLException {
+        Integer id = cache.get(name);
+        if (id != null) {
+            return id;
         }
 
-        return enter(name);
+        return enter(connection, name);
     }
 
-    public int enter(String name) throws SQLException {
+    public int enter(Connection connection, String name) throws SQLException {
         int id = -1;
-        Connection connection = database.getConnection();
 
         try {
             connection.setAutoCommit(false);
@@ -133,7 +152,8 @@ public class WorldTable {
                 } else {
                     insertEntry.setString(1, name);
                     insertEntry.executeUpdate();
-                    try (ResultSet updateResult = insertEntry.getGeneratedKeys()) {
+                    try (ResultSet updateResult = insertEntry
+                            .getGeneratedKeys()) {
                         updateResult.next();
                         id = updateResult.getInt(1);
                     }
@@ -145,9 +165,7 @@ public class WorldTable {
             connection.setAutoCommit(true);
         }
 
-        synchronized (this) {
-            cache.put(name, id);
-        }
+        cache.put(name, id);
 
         return id;
     }

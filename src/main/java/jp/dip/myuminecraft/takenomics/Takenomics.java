@@ -1,13 +1,13 @@
 package jp.dip.myuminecraft.takenomics;
 
-import java.sql.SQLException;
+import java.sql.Connection;
 import java.util.Locale;
 import java.util.ResourceBundle;
 
+import jp.dip.myuminecraft.takecore.DatabaseTask;
 import jp.dip.myuminecraft.takecore.Logger;
 import jp.dip.myuminecraft.takecore.Messages;
 import jp.dip.myuminecraft.takenomics.listeners.PlayerJoinQuitListener;
-import jp.dip.myuminecraft.takenomics.listeners.SignScanListener;
 import jp.dip.myuminecraft.takenomics.listeners.UserBalanceUpdateListener;
 import jp.dip.myuminecraft.takenomics.models.AccessLog;
 import jp.dip.myuminecraft.takenomics.models.PlayerTable;
@@ -16,6 +16,7 @@ import jp.dip.myuminecraft.takenomics.models.TransactionTable;
 import jp.dip.myuminecraft.takenomics.models.WorldTable;
 import net.milkbowl.vault.economy.Economy;
 
+import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -54,21 +55,26 @@ public class Takenomics extends JavaPlugin {
             saveDefaultConfig();
 
             logger = new Logger(getLogger());
-            Locale locale = Messages.getLocale(getConfig().getString("locale"));
-            messages = new Messages(ResourceBundle.getBundle("messages", locale), locale);
+            Locale locale = Messages
+                    .getLocale(getConfig().getString("locale"));
+            messages = new Messages(
+                    ResourceBundle.getBundle("messages", locale), locale);
             worldGuard = getWorldGuard();
             economy = getEconomyProvider();
 
-            commandDispatcher = new CommandDispatcher(messages, "takenomics.command.");
+            commandDispatcher = new CommandDispatcher(messages,
+                    "takenomics.command.");
             getCommand("takenomics").setExecutor(commandDispatcher);
 
             registerReloadCommand();
 
-            signScanner = new SignScanner(this, logger, messages, commandDispatcher);
+            signScanner = new SignScanner(this, logger, messages,
+                    commandDispatcher);
             signScanner.enable();
 
             database = new Database(this, logger);
-            if (database.enable() || database.getConnection() == null) {
+            if (database
+                    .enable(getConfig().getConfigurationSection("database"))) {
                 database = null;
             }
 
@@ -76,12 +82,11 @@ public class Takenomics extends JavaPlugin {
             if (playerTable.enable()) {
                 playerTable = null;
             } else {
-                getServer().getPluginManager().registerEvents(
-                        new UserBalanceUpdateListener(
-                                this, logger, database, playerTable),
-                        this);
+                Bukkit.getPluginManager()
+                        .registerEvents(new UserBalanceUpdateListener(this,
+                                logger, database, playerTable), this);
             }
- 
+
             worldTable = new WorldTable(this, logger, database);
             if (worldTable.enable()) {
                 worldTable = null;
@@ -91,53 +96,54 @@ public class Takenomics extends JavaPlugin {
             if (accessLog.enable()) {
                 accessLog = null;
             } else {
-                getServer().getPluginManager().registerEvents(
-                        new PlayerJoinQuitListener(logger, playerTable, accessLog), this);
+                Bukkit.getPluginManager().registerEvents(
+                        new PlayerJoinQuitListener(logger, accessLog), this);
             }
 
-            shopTable = new ShopTable(this, logger, database, playerTable, worldTable);
+            shopTable = new ShopTable(this, logger, database, playerTable,
+                    worldTable);
             if (shopTable.enable()) {
                 shopTable = null;
             } else {
-                getServer().getPluginManager().registerEvents(
-                        new SignScanListener(this, logger, database, shopTable), this);                
                 registerShopCommands();
             }
-            
-            transactionTable = new TransactionTable(this, logger, database, playerTable, shopTable);
+
+            transactionTable = new TransactionTable(this, logger, database,
+                    playerTable, shopTable);
             if (transactionTable.enable()) {
                 transactionTable = null;
             }
 
-            chestShopMonitor = new ShopMonitor
-                    (this, logger, database, playerTable, worldTable, shopTable, transactionTable);
+            chestShopMonitor = new ShopMonitor(this, logger, database,
+                    playerTable, worldTable, shopTable, transactionTable);
             if (chestShopMonitor.enable()) {
                 chestShopMonitor = null;
             }
 
-            essentialsShopMonitor = new EssentialsShopMonitor
-                    (this, logger, database, shopTable, transactionTable);
+            essentialsShopMonitor = new EssentialsShopMonitor(this, logger,
+                    database, shopTable, transactionTable);
             if (essentialsShopMonitor.enable()) {
                 essentialsShopMonitor = null;
             }
-            
-            taxLogger = new TaxLogger(this);
-            regionManager = new RegionManager(this, logger, playerTable, worldGuard);
 
-            taxOnSavingsCollector = new TaxOnSavingsCollector
-                    (this, logger, messages, taxLogger, economy);
+            taxLogger = new TaxLogger(this);
+            regionManager = new RegionManager(this, logger, playerTable,
+                    worldGuard);
+
+            taxOnSavingsCollector = new TaxOnSavingsCollector(this, logger,
+                    messages, taxLogger, economy);
             taxOnSavingsCollector.enable();
 
-            redstoneTaxCollector = new RedstoneTaxCollector
-                    (this, logger, messages, taxLogger, economy, regionManager);
+            redstoneTaxCollector = new RedstoneTaxCollector(this, logger,
+                    messages, taxLogger, economy, regionManager);
             redstoneTaxCollector.enable();
-            
-            livestockTaxCollector = new LivestockTaxCollector
-                    (this, logger, messages, database, taxLogger, regionManager, economy);
+
+            livestockTaxCollector = new LivestockTaxCollector(this, logger,
+                    messages, database, taxLogger, regionManager, economy);
             livestockTaxCollector.enable();
 
-            hopperTaxCollector = new HopperTaxCollector
-                    (this, logger, messages, taxLogger, economy, regionManager);
+            hopperTaxCollector = new HopperTaxCollector(this, logger, messages,
+                    taxLogger, economy, regionManager);
             hopperTaxCollector.enable();
 
         } catch (Throwable th) {
@@ -145,10 +151,11 @@ public class Takenomics extends JavaPlugin {
             getServer().getPluginManager().disablePlugin(this);
         }
     }
-    
+
     void registerReloadCommand() {
         commandDispatcher.addCommand("reload", new CommandExecutor() {
-            public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
+            public boolean onCommand(CommandSender sender, Command cmd,
+                    String label, String[] args) {
                 if (args.length != 1) {
                     return false;
                 }
@@ -157,19 +164,30 @@ public class Takenomics extends JavaPlugin {
 
                 return true;
             }
-        }); 
+        });
     }
 
     void registerShopCommands() {
-        CommandDispatcher shopCommands= new CommandDispatcher(commandDispatcher, "shops");
+        CommandDispatcher shopCommands = new CommandDispatcher(
+                commandDispatcher, "shops");
 
         shopCommands.addCommand("scrub", new CommandExecutor() {
             @Override
             public boolean onCommand(CommandSender sender, Command arg1,
                     String arg2, String[] arg3) {
+                if (shopTable == null) {
+                    return true;
+                }
+
                 try {
-                    shopTable.runScrubTransaction();
-                } catch (SQLException | UnknownPlayerException e) {
+                    database.submitAsync(new DatabaseTask() {
+                        @Override
+                        public void run(Connection connection)
+                                throws Throwable {
+                            shopTable.runScrubTransaction(connection);
+                        }
+                    });
+                } catch (Throwable e) {
                     logger.warning(e, "failed to scrub shop table.");
                 }
                 return true;
@@ -183,7 +201,8 @@ public class Takenomics extends JavaPlugin {
                 .getRegistration(net.milkbowl.vault.economy.Economy.class);
 
         if (economyProvider == null) {
-            String msg = String.format("No Vault found!  Disabled %s.", getName());
+            String msg = String.format("No Vault found!  Disabled %s.",
+                    getName());
             throw new Exception(msg);
         }
 
@@ -193,15 +212,16 @@ public class Takenomics extends JavaPlugin {
     WorldGuardPlugin getWorldGuard() throws Exception {
         Plugin result = getServer().getPluginManager().getPlugin("WorldGuard");
 
-        if (result == null || ! (result instanceof WorldGuardPlugin)) {
-            String msg = String.format("No WorldGuard found!  Disabled %s.", getName());
+        if (result == null || !(result instanceof WorldGuardPlugin)) {
+            String msg = String.format("No WorldGuard found!  Disabled %s.",
+                    getName());
             throw new Exception(msg);
         }
-     
+
         return (WorldGuardPlugin) result;
 
     }
-    
+
     @Override
     public void onDisable() {
         if (livestockTaxCollector != null) {
@@ -233,13 +253,13 @@ public class Takenomics extends JavaPlugin {
         }
 
         signScanner = null;
-        commandDispatcher = null;     
+        commandDispatcher = null;
         messages = null;
         logger = null;
     }
 
     public void reload() {
         getServer().getPluginManager().disablePlugin(this);
-        getServer().getPluginManager().enablePlugin(this);        
+        getServer().getPluginManager().enablePlugin(this);
     }
 }

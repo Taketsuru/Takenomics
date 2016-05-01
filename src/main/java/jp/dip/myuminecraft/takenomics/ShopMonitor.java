@@ -1,11 +1,13 @@
 package jp.dip.myuminecraft.takenomics;
 
-import java.sql.SQLException;
+import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import jp.dip.myuminecraft.takecore.DatabaseTask;
 import jp.dip.myuminecraft.takecore.Logger;
 import jp.dip.myuminecraft.takenomics.models.PlayerTable;
 import jp.dip.myuminecraft.takenomics.models.ShopTable;
@@ -53,8 +55,8 @@ public class ShopMonitor implements Listener, ShopValidator {
     ShopTable               shopTable;
     TransactionTable        transactionTable;
 
-    public ShopMonitor(JavaPlugin plugin, final Logger logger, Database database,
-            PlayerTable playerTable, WorldTable worldTable,
+    public ShopMonitor(JavaPlugin plugin, final Logger logger,
+            Database database, PlayerTable playerTable, WorldTable worldTable,
             ShopTable shopTable, TransactionTable transactionTable) {
         this.plugin = plugin;
         this.logger = logger;
@@ -66,14 +68,15 @@ public class ShopMonitor implements Listener, ShopValidator {
     }
 
     public boolean enable() {
-        if (database == null || playerTable == null
-                || worldTable == null || shopTable == null
-                || transactionTable == null) {
-            logger.warning("No database connection.  Disabled chestshop monitor.");
+        if (database == null || playerTable == null || worldTable == null
+                || shopTable == null || transactionTable == null) {
+            logger.warning(
+                    "No database connection.  Disabled chestshop monitor.");
             return true;
         }
 
-        Plugin result = plugin.getServer().getPluginManager().getPlugin("ChestShop");
+        Plugin result = plugin.getServer().getPluginManager()
+                .getPlugin("ChestShop");
         if (result == null || !(result instanceof ChestShop)) {
             logger.warning("ChestShop is not found.");
             return true;
@@ -86,9 +89,7 @@ public class ShopMonitor implements Listener, ShopValidator {
         return false;
     }
 
-
-    Shop newShop(Sign sign, String[] lines) throws UnknownPlayerException,
-            SQLException {
+    Shop newShop(Sign sign, String[] lines) {
         int x = sign.getX();
         int z = sign.getZ();
         int y = sign.getY();
@@ -130,7 +131,8 @@ public class ShopMonitor implements Listener, ShopValidator {
                     int slotCount = inventory.getSize();
                     for (int i = 0; i < slotCount; ++i) {
                         ItemStack slot = inventory.getItem(i);
-                        if (slot == null || slot.getType().equals(Material.AIR)) {
+                        if (slot == null
+                                || slot.getType().equals(Material.AIR)) {
                             purchasableQuantity += item.getMaxStackSize();
                         } else if (slot.isSimilar(item)) {
                             purchasableQuantity += item.getMaxStackSize()
@@ -154,103 +156,70 @@ public class ShopMonitor implements Listener, ShopValidator {
 
     @EventHandler
     void onShopCreatedEvent(ShopCreatedEvent event) {
-        try {
-            final Shop shop = newShop(event.getSign(), event.getSignLines());
-            database.runAsynchronously(new Runnable() {
-                public void run() {
-                    try {
-                        shopTable.put(shop);
-                    } catch (SQLException | UnknownPlayerException e) {
-                        logger.warning(e, "Failed to enter a shop record.");
-                    }
-                }
-            });
-        } catch (SQLException | UnknownPlayerException e) {
-            logger.warning(e, "Failed to enter shop record.");
-        }
+        Shop shop = newShop(event.getSign(), event.getSignLines());
+        database.submitAsync(new DatabaseTask() {
+            public void run(Connection connection) throws Throwable {
+                shopTable.put(connection, shop);
+            }
+        });
     }
 
     @EventHandler
     void onShopDestroyedEvent(ShopDestroyedEvent event) {
-        try {
-            final Shop row = newShop(event.getSign(), event.getSign().getLines());
-            database.runAsynchronously(new Runnable() {
-                public void run() {
-                    try {
-                        shopTable.remove(row.world, row.x, row.y, row.z);
-                    } catch (SQLException e) {
-                        logger.warning(e, "Failed to delete shop record.");
-                    }
-                }
-            });
-        } catch (SQLException | UnknownPlayerException e) {
-            logger.warning(e, "Failed to delete shop record.");
-        }
+        Shop shop = newShop(event.getSign(), event.getSign().getLines());
+        database.submitAsync(new DatabaseTask() {
+            public void run(Connection connection) throws Throwable {
+                shopTable.remove(connection, shop.world, shop.x, shop.y,
+                        shop.z);
+            }
+        });
     }
 
     @EventHandler
     void onTransactionEvent(TransactionEvent event) {
-        try {
-            final Shop shop = newShop(
-                    event.getSign(), event.getSign().getLines());
-            final UUID playerId = event.getClient().getUniqueId();
-            final TransactionType type = event.getTransactionType();
-            final int amount = event.getStock()[0].getAmount();
-            database.runAsynchronously(new Runnable() {
-                public void run() {
-                    try {
-                        transactionTable.put(shop, playerId, type, amount);
-                    } catch (SQLException | UnknownPlayerException e) {
-                        logger.warning(e,
-                                "Failed to enter a transaction record.");
-                    }
-                }
-            });
-        } catch (SQLException | UnknownPlayerException e) {
-            logger.warning(e, "Failed to delete shop record.");
-        }
+        Shop shop = newShop(event.getSign(), event.getSign().getLines());
+        UUID playerId = event.getClient().getUniqueId();
+        TransactionType type = event.getTransactionType();
+        int amount = event.getStock()[0].getAmount();
+        database.submitAsync(new DatabaseTask() {
+            public void run(Connection connection) throws Throwable {
+                transactionTable.put(connection, shop, playerId, type, amount);
+            }
+        });
     }
 
-     static final BlockFace chestFaces[] = { BlockFace.SOUTH, BlockFace.WEST,
-            BlockFace.NORTH, BlockFace.EAST, BlockFace.UP, BlockFace.DOWN };
+    static final BlockFace chestFaces[] = { BlockFace.SOUTH, BlockFace.WEST,
+    BlockFace.NORTH, BlockFace.EAST, BlockFace.UP, BlockFace.DOWN };
 
     @EventHandler
     public void onInventoryClose(InventoryCloseEvent event) {
         InventoryHolder holder = event.getInventory().getHolder();
 
-        Set<Sign> signs = new HashSet<Sign>();
+        Set<Sign> signs = new HashSet<>();
 
         if (holder instanceof Chest) {
             addAttachingChestShopSigns((Chest) holder, signs);
+
         } else if (holder instanceof DoubleChest) {
             DoubleChest doubleChest = (DoubleChest) holder;
-            addAttachingChestShopSigns(
-                    (Chest)(doubleChest.getLeftSide()), signs);
-            addAttachingChestShopSigns(
-                    (Chest)(doubleChest.getRightSide()), signs);
+            addAttachingChestShopSigns((Chest) (doubleChest.getLeftSide()),
+                    signs);
+            addAttachingChestShopSigns((Chest) (doubleChest.getRightSide()),
+                    signs);
         }
 
         if (signs.isEmpty()) {
             return;
         }
 
-        final ArrayList<Shop> rows = new ArrayList<Shop>();
-        try {
-            for (Sign sign : signs) {
-                rows.add(newShop(sign, sign.getLines()));
-            }
-        } catch (SQLException | UnknownPlayerException e) {
-            logger.warning(e, "Failed to enter a shop record.");
-            return;
+        List<Shop> rows = new ArrayList<>();
+        for (Sign sign : signs) {
+            rows.add(newShop(sign, sign.getLines()));
         }
 
-        database.runAsynchronously(new Runnable() {
-            public void run() {
-                try {
-                    shopTable.put(rows);
-                } catch (SQLException | UnknownPlayerException e) {
-                    logger.warning(e, "Failed to enter a shop record.");
-                }
+        database.submitAsync(new DatabaseTask() {
+            public void run(Connection connection) throws Throwable {
+                shopTable.put(connection, rows);
             }
         });
     }
@@ -279,21 +248,16 @@ public class ShopMonitor implements Listener, ShopValidator {
 
     @Override
     public Shop validate(BlockState state) {
-        if (! (state instanceof Sign)) {
+        if (!(state instanceof Sign)) {
             return null;
-        }
-        
-        Sign sign = (Sign)state;
-        if (! ChestShopSign.isValid(sign)) {
-            return null;
-        }
-        
-        try {
-            return newShop(sign, sign.getLines());
-        } catch (UnknownPlayerException | SQLException e) {
         }
 
-        return null;
+        Sign sign = (Sign) state;
+        if (!ChestShopSign.isValid(sign)) {
+            return null;
+        }
+
+        return newShop(sign, sign.getLines());
     }
 
 }

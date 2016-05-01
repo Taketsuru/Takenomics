@@ -6,6 +6,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.UUID;
 
+import jp.dip.myuminecraft.takecore.DatabaseTask;
 import jp.dip.myuminecraft.takecore.Logger;
 import jp.dip.myuminecraft.takenomics.Database;
 import jp.dip.myuminecraft.takenomics.UnknownPlayerException;
@@ -25,22 +26,22 @@ public class TransactionTable {
     String            tableName;
     PreparedStatement insertTransaction;
 
-    public TransactionTable(JavaPlugin plugin, Logger logger, Database database,
-            PlayerTable playerTable, ShopTable shopTable) {
+    public TransactionTable(JavaPlugin plugin, Logger logger,
+            Database database, PlayerTable playerTable, ShopTable shopTable) {
         this.plugin = plugin;
         this.logger = logger;
         this.database = database;
         this.playerTable = playerTable;
         this.shopTable = shopTable;
     }
-    
+
     public String getTableName() {
         assert tableName != null;
         return tableName;
     }
 
     public boolean enable() {
-        if (database == null) {
+        if (database == null || playerTable == null || shopTable == null) {
             return true;
         }
 
@@ -48,37 +49,46 @@ public class TransactionTable {
         tableName = tablePrefix + "transactions";
 
         try {
-            setupTable();
-            prepareStatements();
-        } catch (SQLException e) {
+            database.submitSync(new DatabaseTask() {
+                @Override
+                public void run(Connection connection) throws Throwable {
+                    setupTable(connection);
+                    prepareStatements(connection);
+                }
+            });
+        } catch (Throwable e) {
             logger.warning(e, "Failed to setup transaction table.");
             disable();
             return true;
         }
-        
+
         return false;
     }
-    
+
     public void disable() {
         if (insertTransaction != null) {
-            try { insertTransaction.close(); } catch (SQLException e) {}
+            try {
+                insertTransaction.close();
+            } catch (SQLException e) {
+            }
             insertTransaction = null;
         }
 
         tableName = null;
     }
 
-    public void put(Shop shop, UUID player, TransactionType type, int amount)
+    public void put(Connection connection, Shop shop, UUID player,
+            TransactionType type, int amount)
             throws SQLException, UnknownPlayerException {
-        Connection connection = database.getConnection();
 
-        shopTable.put(shop);
+        shopTable.put(connection, shop);
 
         connection.setAutoCommit(false);
         try {
-            int shopId = shopTable.getId(shop.world, shop.x, shop.y, shop.z);
+            int shopId = shopTable.getId(connection, shop.world, shop.x,
+                    shop.y, shop.z);
             insertTransaction.setInt(1, shopId);
-            int playerId = playerTable.getId(player);
+            int playerId = playerTable.getId(connection, player);
             insertTransaction.setInt(2, playerId);
             insertTransaction.setString(3, type.toString().toLowerCase());
             insertTransaction.setInt(4, amount);
@@ -92,8 +102,7 @@ public class TransactionTable {
         }
     }
 
-    void setupTable() throws SQLException {
-        Connection connection = database.getConnection();
+    void setupTable(Connection connection) throws SQLException {
         try (Statement statement = connection.createStatement()) {
             statement.execute(String.format("CREATE TABLE IF NOT EXISTS %s ("
                     + "id INT UNSIGNED AUTO_INCREMENT NOT NULL,"
@@ -104,18 +113,14 @@ public class TransactionTable {
                     + "quantity SMALLINT NOT NULL," + "PRIMARY KEY (id),"
                     + "FOREIGN KEY (shop) REFERENCES %s (id),"
                     + "FOREIGN KEY (player) REFERENCES %s (id)" + ")",
-                    tableName,
-                    shopTable.getTableName(),
+                    tableName, shopTable.getTableName(),
                     playerTable.getTableName()));
         }
     }
 
-    void prepareStatements() throws SQLException {
-        Connection connection = database.getConnection();
-
+    void prepareStatements(Connection connection) throws SQLException {
         insertTransaction = connection.prepareStatement(String.format(
-                "INSERT INTO %s VALUES (NULL,NULL,?,?,?,?)",
-                tableName));
+                "INSERT INTO %s VALUES (NULL,NULL,?,?,?,?)", tableName));
     }
 
 }

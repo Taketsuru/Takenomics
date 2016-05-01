@@ -11,6 +11,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
+import jp.dip.myuminecraft.takecore.DatabaseTask;
 import jp.dip.myuminecraft.takecore.Logger;
 import jp.dip.myuminecraft.takenomics.Constants;
 import jp.dip.myuminecraft.takenomics.Database;
@@ -38,9 +39,9 @@ public class ShopTable {
         public int    stock;
         public int    purchasableQuantity;
 
-        public Shop(int x, int z, int y, String world, UUID owner, int quantity,
-                String material, double buyPrice, double sellPrice,
-                int stock, int purchasableQuantity) {
+        public Shop(int x, int z, int y, String world, UUID owner,
+                int quantity, String material, double buyPrice,
+                double sellPrice, int stock, int purchasableQuantity) {
             this.x = x;
             this.z = z;
             this.y = y;
@@ -64,7 +65,7 @@ public class ShopTable {
     WorldTable              worldTable;
     String                  tableName;
     String                  temporaryTableName;
-    Set<ShopValidator>      validators = new HashSet<ShopValidator>();
+    Set<ShopValidator>      validators           = new HashSet<ShopValidator>();
     PreparedStatement       truncateTemporary;
     PreparedStatement       insertIntoTemporary;
     PreparedStatement       deleteObsoleteShopsInXZRange;
@@ -82,7 +83,7 @@ public class ShopTable {
         this.playerTable = playerTable;
         this.worldTable = worldTable;
     }
-    
+
     public String getTableName() {
         return tableName;
     }
@@ -91,37 +92,19 @@ public class ShopTable {
         if (database == null || playerTable == null || worldTable == null) {
             return true;
         }
-        
+
         String tablePrefix = database.getTablePrefix();
         tableName = tablePrefix + "shops";
         temporaryTableName = tablePrefix + "shops_temp";
 
         try {
-            if (! database.hasTable(tableName)) {
-                createShopTable(tableName);
-            } else {
-                int existingTableVersion = database.getVersion(tableName);  
-                switch (existingTableVersion) {  
-
-                case currentSchemaVersion:
-                    break;
-
-                case 0:
-                    upgradeShopTableFromVersion0();
-                    break;
-
-                default:
-                    logger.warning("%s: Unsupported table schema version %d",
-                            tableName, existingTableVersion);
-                    disable();
-                    return true;
+            database.submitSync(new DatabaseTask() {
+                @Override
+                public void run(Connection connection) throws Throwable {
+                    initializeTable(connection);
                 }
-            }
-
-            initializeTemporaryTable();
-            prepareStatements();
-            truncateTemporary.executeUpdate();
-        } catch (SQLException e) {
+            });
+        } catch (Throwable e) {
             logger.warning(e, "Failed to initialize shop table.");
             disable();
             return true;
@@ -129,47 +112,100 @@ public class ShopTable {
 
         return false;
     }
-    
+
+    void initializeTable(Connection connection) throws Throwable {
+        if (!database.hasTable(connection, tableName)) {
+            createShopTable(connection, tableName);
+
+        } else {
+            int existingTableVersion = database.getVersion(connection,
+                    tableName);
+            switch (existingTableVersion) {
+
+            case currentSchemaVersion:
+                break;
+
+            case 0:
+                upgradeShopTableFromVersion0(connection);
+                break;
+
+            default:
+                throw new Exception(String.format(
+                        "Unsupported table schema version: "
+                                + "table %s, version %d",
+                        tableName, existingTableVersion));
+            }
+        }
+
+        initializeTemporaryTable(connection);
+        prepareStatements(connection);
+        truncateTemporary.executeUpdate();
+    }
+
     public void disable() {
         if (truncateTemporary != null) {
-            try { truncateTemporary.close(); } catch (SQLException e) {}
+            try {
+                truncateTemporary.close();
+            } catch (SQLException e) {
+            }
             truncateTemporary = null;
         }
         if (deleteObsoleteShopsInXZRange != null) {
-            try { deleteObsoleteShopsInXZRange.close(); } catch (SQLException e) {}
+            try {
+                deleteObsoleteShopsInXZRange.close();
+            } catch (SQLException e) {
+            }
             deleteObsoleteShopsInXZRange = null;
         }
         if (deleteObsoleteShops != null) {
-            try { deleteObsoleteShops.close(); } catch (SQLException e) {}
+            try {
+                deleteObsoleteShops.close();
+            } catch (SQLException e) {
+            }
             deleteObsoleteShops = null;
         }
         if (scrubShops != null) {
-            try { scrubShops.close(); } catch (SQLException e) {}
+            try {
+                scrubShops.close();
+            } catch (SQLException e) {
+            }
             scrubShops = null;
         }
         if (insertIntoTemporary != null) {
-            try { insertIntoTemporary.close(); } catch (SQLException e) {}
+            try {
+                insertIntoTemporary.close();
+            } catch (SQLException e) {
+            }
             insertIntoTemporary = null;
         }
         if (replaceShops != null) {
-            try { replaceShops.close(); } catch (SQLException e) {}
+            try {
+                replaceShops.close();
+            } catch (SQLException e) {
+            }
             replaceShops = null;
         }
         if (getIdStatement != null) {
-            try { getIdStatement.close(); } catch (SQLException e) {}
+            try {
+                getIdStatement.close();
+            } catch (SQLException e) {
+            }
             getIdStatement = null;
         }
         if (deleteShop != null) {
-            try { deleteShop.close(); } catch (SQLException e) {}
+            try {
+                deleteShop.close();
+            } catch (SQLException e) {
+            }
             deleteShop = null;
         }
     }
 
-    public void put(Shop shop) throws SQLException, UnknownPlayerException {
-        Connection connection = database.getConnection();
+    public void put(Connection connection, Shop shop)
+            throws SQLException, UnknownPlayerException {
         connection.setAutoCommit(false);
         try {
-            setInsertShopParams(shop, insertIntoTemporary);
+            setInsertShopParams(connection, shop, insertIntoTemporary);
             insertIntoTemporary.executeUpdate();
             deleteObsoleteShops.executeUpdate();
             replaceShops.executeUpdate();
@@ -183,13 +219,13 @@ public class ShopTable {
         }
     }
 
-    public void put(Collection<Shop> shops) throws SQLException, UnknownPlayerException {
-        Connection connection = database.getConnection();
+    public void put(Connection connection, Collection<Shop> shops)
+            throws SQLException, UnknownPlayerException {
         connection.setAutoCommit(false);
         try {
             int batchSize = 0;
             for (Shop shop : shops) {
-                setInsertShopParams(shop, insertIntoTemporary);
+                setInsertShopParams(connection, shop, insertIntoTemporary);
                 insertIntoTemporary.addBatch();
                 if (maxBatchSize <= ++batchSize) {
                     insertIntoTemporary.executeBatch();
@@ -209,19 +245,21 @@ public class ShopTable {
         }
     }
 
-    public void remove(String world, int x, int y, int z) throws SQLException {
+    public void remove(Connection connection, String world, int x, int y,
+            int z) throws SQLException {
         deleteShop.setInt(1, x);
         deleteShop.setInt(2, z);
         deleteShop.setInt(3, y);
-        deleteShop.setInt(4, worldTable.getId(world));
+        deleteShop.setInt(4, worldTable.getId(connection, world));
         deleteShop.executeUpdate();
     }
-    
-    public int getId(String world, int x, int y, int z) throws SQLException {
+
+    public int getId(Connection connection, String world, int x, int y, int z)
+            throws SQLException {
         getIdStatement.setInt(1, x);
         getIdStatement.setInt(2, z);
         getIdStatement.setInt(3, y);
-        getIdStatement.setInt(4, worldTable.getId(world));
+        getIdStatement.setInt(4, worldTable.getId(connection, world));
 
         try (ResultSet resultSet = getIdStatement.executeQuery()) {
             resultSet.next();
@@ -237,18 +275,18 @@ public class ShopTable {
         validators.remove(validator);
     }
 
-    public void runScrubTransaction() throws SQLException, UnknownPlayerException {
+    public void runScrubTransaction(Connection connection)
+            throws SQLException, UnknownPlayerException {
         Server server = plugin.getServer();
-        Connection connection = database.getConnection();
         connection.setAutoCommit(false);
 
         try (Statement stmt = connection.createStatement()) {
 
             int batchSize = 0;
-            try (ResultSet rs = stmt
-                    .executeQuery(String.format("SELECT x,z,y,t2.name "
-                                    + "FROM %s t1 INNER JOIN %s t2 ON t1.world = t2.id",
-                                    tableName, worldTable.getTableName()))) {
+            try (ResultSet rs = stmt.executeQuery(String.format(
+                    "SELECT x,z,y,t2.name "
+                            + "FROM %s t1 INNER JOIN %s t2 ON t1.world = t2.id",
+                    tableName, worldTable.getTableName()))) {
                 while (rs.next()) {
                     int x = rs.getInt(1);
                     int z = rs.getInt(2);
@@ -267,7 +305,8 @@ public class ShopTable {
                     for (ShopValidator validator : validators) {
                         Shop shop = validator.validate(block.getState());
                         if (shop != null) {
-                            setInsertShopParams(shop, insertIntoTemporary);
+                            setInsertShopParams(connection, shop,
+                                    insertIntoTemporary);
                             insertIntoTemporary.addBatch();
                             if (maxBatchSize <= ++batchSize) {
                                 insertIntoTemporary.executeBatch();
@@ -293,10 +332,8 @@ public class ShopTable {
         }
     }
 
-    public void runSyncChunkTransaction(
-            int chunkX, int chunkZ, Collection<BlockState> states)
-            throws SQLException {
-        Connection connection = database.getConnection();
+    public void runSyncChunkTransaction(Connection connection, int chunkX,
+            int chunkZ, Collection<BlockState> states) throws SQLException {
         connection.setAutoCommit(false);
 
         try {
@@ -306,7 +343,8 @@ public class ShopTable {
                     try {
                         Shop shop = validator.validate(state);
                         if (shop != null) {
-                            setInsertShopParams(shop, insertIntoTemporary);
+                            setInsertShopParams(connection, shop,
+                                    insertIntoTemporary);
                             insertIntoTemporary.addBatch();
                             if (maxBatchSize <= ++batchSize) {
                                 insertIntoTemporary.executeBatch();
@@ -321,10 +359,14 @@ public class ShopTable {
             }
             insertIntoTemporary.executeBatch();
 
-            deleteObsoleteShopsInXZRange.setInt(1, chunkX       * Constants.chunkXSize);
-            deleteObsoleteShopsInXZRange.setInt(2, (chunkX + 1) * Constants.chunkXSize);
-            deleteObsoleteShopsInXZRange.setInt(3, chunkZ       * Constants.chunkZSize);
-            deleteObsoleteShopsInXZRange.setInt(4, (chunkZ + 1) * Constants.chunkZSize);
+            deleteObsoleteShopsInXZRange.setInt(1,
+                    chunkX * Constants.chunkXSize);
+            deleteObsoleteShopsInXZRange.setInt(2,
+                    (chunkX + 1) * Constants.chunkXSize);
+            deleteObsoleteShopsInXZRange.setInt(3,
+                    chunkZ * Constants.chunkZSize);
+            deleteObsoleteShopsInXZRange.setInt(4,
+                    (chunkZ + 1) * Constants.chunkZSize);
             deleteObsoleteShopsInXZRange.executeUpdate();
             replaceShops.executeUpdate();
             truncateTemporary.executeUpdate();
@@ -338,130 +380,116 @@ public class ShopTable {
         }
     }
 
-    void createShopTable(String tableName) throws SQLException {
-        Connection connection = database.getConnection();
+    void createShopTable(Connection connection, String tableName)
+            throws SQLException {
         try (Statement statement = connection.createStatement()) {
-            statement.execute(String.format
-                    ("CREATE TABLE %s ("
+            statement.execute(String.format(
+                    "CREATE TABLE %s ("
                             + "id SMALLINT UNSIGNED AUTO_INCREMENT NOT NULL,"
-                            + "x SMALLINT NOT NULL,"
-                            + "z SMALLINT NOT NULL,"
+                            + "x SMALLINT NOT NULL," + "z SMALLINT NOT NULL,"
                             + "y SMALLINT NOT NULL,"
                             + "world TINYINT UNSIGNED NOT NULL,"
                             + "owner MEDIUMINT UNSIGNED,"
                             + "quantity SMALLINT UNSIGNED NOT NULL,"
                             + "material VARCHAR(16) CHARACTER SET ascii NOT NULL,"
-                            + "buy_price DOUBLE,"
-                            + "sell_price DOUBLE,"
+                            + "buy_price DOUBLE," + "sell_price DOUBLE,"
                             + "stock SMALLINT UNSIGNED,"
                             + "purchasable_quantity SMALLINT UNSIGNED,"
-                            + "PRIMARY KEY (id),"
-                            + "UNIQUE (x,z,y,world),"
+                            + "PRIMARY KEY (id)," + "UNIQUE (x,z,y,world),"
                             + "FOREIGN KEY (world) REFERENCES %s (id),"
-                            + "FOREIGN KEY (owner) REFERENCES %s (id)"
-                            + ")",
-                            tableName, worldTable.getTableName(), playerTable.getTableName()));
+                            + "FOREIGN KEY (owner) REFERENCES %s (id)" + ")",
+                    tableName, worldTable.getTableName(),
+                    playerTable.getTableName()));
         }
-        database.setVersion(tableName, currentSchemaVersion);
+        database.setVersion(connection, tableName, currentSchemaVersion);
     }
 
-    void upgradeShopTableFromVersion0() throws SQLException {
-        Connection connection = database.getConnection();
+    void upgradeShopTableFromVersion0(Connection connection)
+            throws SQLException {
         try (Statement stmt = connection.createStatement()) {
-            stmt.execute(String.format("ALTER TABLE %s ADD COLUMN stock SMALLINT UNSIGNED, "
-                    + "ADD COLUMN purchasable_quantity SMALLINT UNSIGNED,"
-                    + "DROP INDEX owner",
-                    tableName));
+            stmt.execute(String
+                    .format("ALTER TABLE %s ADD COLUMN stock SMALLINT UNSIGNED, "
+                            + "ADD COLUMN purchasable_quantity SMALLINT UNSIGNED,"
+                            + "DROP INDEX owner", tableName));
         }
-        database.setVersion(tableName, currentSchemaVersion);
+        database.setVersion(connection, tableName, currentSchemaVersion);
     }
 
-    void initializeTemporaryTable() throws SQLException {
-        Connection connection = database.getConnection();
+    void initializeTemporaryTable(Connection connection) throws SQLException {
         try (Statement statement = connection.createStatement()) {
-            statement.execute(String.format("DROP TABLE IF EXISTS %s", temporaryTableName));
-            statement.execute(String.format("CREATE TEMPORARY TABLE %s LIKE %s",
+            statement.execute(String.format("DROP TABLE IF EXISTS %s",
+                    temporaryTableName));
+            statement
+                    .execute(String.format("CREATE TEMPORARY TABLE %s LIKE %s",
                             temporaryTableName, tableName));
         }
     }
 
-    void prepareStatements() throws SQLException {
-        Connection connection = database.getConnection();
+    void prepareStatements(Connection connection) throws SQLException {
+        truncateTemporary = connection.prepareStatement(
+                String.format("TRUNCATE %s", temporaryTableName));
 
-        truncateTemporary = connection.prepareStatement
-                (String.format("TRUNCATE %s", temporaryTableName));
-
-        deleteObsoleteShopsInXZRange = connection.prepareStatement
-                (String.format("DELETE t1 FROM %s t1 LEFT JOIN %s t2 USING (x,z,y,world) "
-                        + "WHERE ? <= t1.x AND t1.x < ? "
-                        + "AND ? <= t1.z AND t1.z < ? "
-                        + "AND (! (t1.owner <=> t2.owner) "
-                        + "OR t1.quantity != t2.quantity "
-                        + "OR t1.material != t2.material "
-                        + "OR ! (t1.buy_price <=> t2.buy_price) "
-                        + "OR ! (t1.sell_price <=> t2.sell_price))",
+        deleteObsoleteShopsInXZRange = connection
+                .prepareStatement(String.format(
+                        "DELETE t1 FROM %s t1 LEFT JOIN %s t2 USING (x,z,y,world) "
+                                + "WHERE ? <= t1.x AND t1.x < ? "
+                                + "AND ? <= t1.z AND t1.z < ? "
+                                + "AND (! (t1.owner <=> t2.owner) "
+                                + "OR t1.quantity != t2.quantity "
+                                + "OR t1.material != t2.material "
+                                + "OR ! (t1.buy_price <=> t2.buy_price) "
+                                + "OR ! (t1.sell_price <=> t2.sell_price))",
                         tableName, temporaryTableName));
 
-        deleteObsoleteShops = connection.prepareStatement
-                (String.format("DELETE t1 FROM %s t1 INNER JOIN %s t2 USING (x,z,y,world) "
+        deleteObsoleteShops = connection.prepareStatement(String.format(
+                "DELETE t1 FROM %s t1 INNER JOIN %s t2 USING (x,z,y,world) "
                         + "WHERE ! (t1.owner <=> t2.owner) "
                         + "OR t1.quantity != t2.quantity "
                         + "OR t1.material != t2.material "
                         + "OR ! (t1.buy_price <=> t2.buy_price) "
                         + "OR ! (t1.sell_price <=> t2.sell_price)",
-                        tableName, temporaryTableName));
+                tableName, temporaryTableName));
 
-        scrubShops = connection.prepareStatement
-                (String.format("DELETE t1 FROM %s t1 LEFT JOIN %s t2 USING (x,z,y,world) "
+        scrubShops = connection.prepareStatement(String.format(
+                "DELETE t1 FROM %s t1 LEFT JOIN %s t2 USING (x,z,y,world) "
                         + "WHERE ! (t1.owner <=> t2.owner) "
                         + "OR t1.quantity != t2.quantity "
                         + "OR t1.material != t2.material "
                         + "OR ! (t1.buy_price <=> t2.buy_price) "
                         + "OR ! (t1.sell_price <=> t2.sell_price)",
-                        tableName, temporaryTableName));
+                tableName, temporaryTableName));
 
-        insertIntoTemporary = connection.prepareStatement
-                (String.format("INSERT INTO %s VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?)",
-                        temporaryTableName));
+        insertIntoTemporary = connection.prepareStatement(String.format(
+                "INSERT INTO %s VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?)",
+                temporaryTableName));
 
-        replaceShops = connection.prepareStatement
-                (String.format("REPLACE %s "
-                        + "SELECT t1.id,"
-                        + "t2.x,"
-                        + "t2.z,"
-                        + "t2.y,"
-                        + "t2.world,"
-                        + "t2.owner,"
-                        + "t2.quantity,"
-                        + "t2.material,"
-                        + "t2.buy_price,"
-                        + "t2.sell_price, "
-                        + "t2.stock, "
-                        + "t2.purchasable_quantity "
+        replaceShops = connection.prepareStatement(String.format(
+                "REPLACE %s " + "SELECT t1.id," + "t2.x," + "t2.z," + "t2.y,"
+                        + "t2.world," + "t2.owner," + "t2.quantity,"
+                        + "t2.material," + "t2.buy_price," + "t2.sell_price, "
+                        + "t2.stock, " + "t2.purchasable_quantity "
                         + "FROM %s t1 RIGHT JOIN %s t2 USING (x,z,y,world) ",
-                        tableName, tableName, temporaryTableName));
+                tableName, tableName, temporaryTableName));
 
-        getIdStatement = connection.prepareStatement
-                (String.format("SELECT id FROM %s WHERE x=? AND z=? AND y=? AND world=?",
-                        tableName));
+        getIdStatement = connection.prepareStatement(String.format(
+                "SELECT id FROM %s WHERE x=? AND z=? AND y=? AND world=?",
+                tableName));
 
-        deleteShop = connection.prepareStatement
-                (String.format("DELETE FROM %s WHERE "
-                        + "x = ? "
-                        + "AND z = ? "
-                        + "AND y = ? "
-                        + "AND world = ?",
-                        tableName));
+        deleteShop = connection.prepareStatement(
+                String.format("DELETE FROM %s WHERE " + "x = ? " + "AND z = ? "
+                        + "AND y = ? " + "AND world = ?", tableName));
     }
 
-    void setInsertShopParams(Shop row, PreparedStatement stmt) throws SQLException, UnknownPlayerException {
+    void setInsertShopParams(Connection connection, Shop row,
+            PreparedStatement stmt)
+            throws SQLException, UnknownPlayerException {
         stmt.clearParameters();
         stmt.setInt(1, row.x);
         stmt.setInt(2, row.z);
         stmt.setInt(3, row.y);
-        stmt.setInt(4, worldTable.getId(row.world));
+        stmt.setInt(4, worldTable.getId(connection, row.world));
         if (row.owner != null) {
-            stmt.setInt(5, playerTable.getId(row.owner));
+            stmt.setInt(5, playerTable.getId(connection, row.owner));
         } else {
             stmt.setNull(5, Types.INTEGER);
         }
