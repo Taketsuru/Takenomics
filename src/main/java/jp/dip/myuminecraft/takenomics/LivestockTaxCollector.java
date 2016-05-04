@@ -43,25 +43,27 @@ import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import jp.dip.myuminecraft.takecore.Logger;
 import jp.dip.myuminecraft.takecore.Messages;
 
-public class LivestockTaxCollector extends PeriodicTaxCollector implements Listener {
+public class LivestockTaxCollector extends PeriodicTaxCollector
+        implements Listener {
 
-    class LivestockTaxRecord extends TaxRecord {       
+    class LivestockTaxRecord extends TaxRecord {
         int    untamed;
         int    tamed;
         double arrears;
         double paid;
 
-        LivestockTaxRecord(long timestamp, OfflinePlayer player, int untamed, int tamed,
-                double arrears, double paid) {
-             super(timestamp, player);
-             this.untamed = untamed;
-             this.tamed = tamed;
-             this.arrears = arrears;
-             this.paid = paid;
+        LivestockTaxRecord(long timestamp, OfflinePlayer player, int untamed,
+                int tamed, double arrears, double paid) {
+            super(timestamp, player);
+            this.untamed = untamed;
+            this.tamed = tamed;
+            this.arrears = arrears;
+            this.paid = paid;
         }
-        
+
         protected String subclassToString() {
-            return String.format("livestock %d %d %f %f", untamed, tamed, arrears, paid);
+            return String.format("livestock %d %d %f %f", untamed, tamed,
+                    arrears, paid);
         }
     }
 
@@ -85,8 +87,8 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
     World                world;
     Iterator<Animals>    entityIter;
 
-    public LivestockTaxCollector(JavaPlugin plugin, Logger logger, Messages messages,
-            Database database, TaxLogger taxLogger, 
+    public LivestockTaxCollector(JavaPlugin plugin, Logger logger,
+            Messages messages, Database database, TaxLogger taxLogger,
             RegionManager regionManager, Economy economy) {
         super(plugin, logger);
         this.messages = messages;
@@ -97,9 +99,10 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
     }
 
     public void enable() {
-        super.loadConfig(logger, plugin.getConfig(), "livestockTax", "livestock tax");
+        super.loadConfig(logger, plugin.getConfig(), "livestockTax",
+                "livestock tax");
 
-        if (! enable) {
+        if (!enable) {
             taxExempt.clear();
             untamedTaxTable.clear();
             tamedTaxTable.clear();
@@ -114,30 +117,35 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
     }
 
-    protected boolean loadConfig(Logger logger, FileConfiguration config, String configPrefix, boolean error) {
-        boolean result = super.loadConfig(logger,  config, configPrefix, error);
-        
-        if (! untamedTaxTable.loadConfig(logger, config, configPrefix + ".untamedTable")) {
+    protected boolean loadConfig(Logger logger, FileConfiguration config,
+            String configPrefix, boolean error) {
+        boolean result = super.loadConfig(logger, config, configPrefix, error);
+
+        if (!untamedTaxTable.loadConfig(logger, config,
+                configPrefix + ".untamedTable")) {
             result = true;
         }
 
-        if (! tamedTaxTable.loadConfig(logger, config, configPrefix + ".tamedTable")) {
+        if (!tamedTaxTable.loadConfig(logger, config,
+                configPrefix + ".tamedTable")) {
             result = true;
         }
 
-        if (loadTaxExemptList(logger, config, configPrefix + ".taxExempt", taxExempt)) {
+        if (loadTaxExemptList(logger, config, configPrefix + ".taxExempt",
+                taxExempt)) {
             result = true;
         }
-        
+
         return result;
     }
-    
+
     @Override
     protected boolean prepareCollection() {
         Server server = plugin.getServer();
 
         if (worldIter == null) {
-            worldIter = new ArrayList<World>(plugin.getServer().getWorlds()).iterator();
+            worldIter = new ArrayList<World>(plugin.getServer().getWorlds())
+                    .iterator();
             world = null;
         }
 
@@ -146,29 +154,31 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
         while (System.nanoTime() < end) {
 
             if (world == null) {
-                if (! worldIter.hasNext()) {
+                if (!worldIter.hasNext()) {
                     worldIter = null;
                     return true;
                 }
 
                 world = worldIter.next();
-                entityIter = world.getEntitiesByClass(Animals.class).iterator();
+                entityIter = world.getEntitiesByClass(Animals.class)
+                        .iterator();
             }
 
-            if (! entityIter.hasNext()) {
+            if (!entityIter.hasNext()) {
                 world = null;
                 entityIter = null;
                 continue;
             }
 
             Entity entity = entityIter.next();
-            if (! (entity instanceof Animals)) {
+            if (!(entity instanceof Animals)) {
                 continue;
             }
-                   
+
             OfflinePlayer payer = null;
-            boolean tamed = entity instanceof Tameable && ((Tameable)entity).isTamed();
-            AnimalTamer owner = tamed ? ((Tameable)entity).getOwner() : null;
+            boolean tamed = entity instanceof Tameable
+                    && ((Tameable) entity).isTamed();
+            AnimalTamer owner = tamed ? ((Tameable) entity).getOwner() : null;
             if (owner != null && owner instanceof OfflinePlayer) {
                 payer = server.getOfflinePlayer(owner.getUniqueId());
             } else {
@@ -192,16 +202,16 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
             }
         }
 
-        return false;            
-   }
+        return false;
+    }
 
     OfflinePlayer findLivestockTaxPayer(Server server, Entity entity) {
-        ProtectedRegion region =
-                regionManager.getHighestPriorityRegion(entity.getLocation());
+        ProtectedRegion region = regionManager
+                .getHighestPriorityRegion(entity.getLocation());
         if (region == null) {
             return null;
         }
-        
+
         if (taxExempt.contains(region.getId())) {
             return null;
         }
@@ -210,9 +220,9 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
         if (owners.isEmpty()) {
             return null;
         }
-        
+
         UUID primaryOwner = owners.get(0);
-        
+
         return server.getOfflinePlayer(primaryOwner);
     }
 
@@ -228,12 +238,14 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
 
         double untamedRate = untamedTaxTable.getRate(untamedCount);
         double tamedRate = tamedTaxTable.getRate(tamedCount);
-        double tax = Math.floor(untamedRate * untamedCount + tamedRate * tamedCount + info.arrears);
+        double tax = Math.floor(untamedRate * untamedCount
+                + tamedRate * tamedCount + info.arrears);
         double balance = economy.getBalance(payer);
         double paid = Math.min(tax, Math.max(0.0, Math.floor(balance)));
 
-        if (payer.isOnline() && (0.0 < tax || 0 < untamedCount + tamedCount)) {
-            Player player = (Player)payer;
+        if (payer instanceof Player
+                && (0.0 < tax || 0 < untamedCount + tamedCount)) {
+            Player player = (Player) payer;
             messages.send(player, "mobTaxNoticeHeader");
             messages.send(player, "mobTaxNoticeLivestockCount", untamedCount);
             messages.send(player, "mobTaxNoticeLivestockRate", untamedRate);
@@ -242,7 +254,7 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
             if (0.0 < info.arrears) {
                 messages.send(player, "mobTaxNoticeArrears", info.arrears);
             }
-            messages.send(player, "mobTaxNoticeTotal", tax);            
+            messages.send(player, "mobTaxNoticeTotal", tax);
         }
 
         if (0.0 < paid || 0.0 < info.arrears) {
@@ -271,7 +283,7 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
         }
 
         Entity entity = event.getRightClicked();
-        if (! (entity instanceof Animals)) {
+        if (!(entity instanceof Animals)) {
             return;
         }
 
@@ -281,21 +293,21 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
             return;
         }
 
-        if (items.getType() == Material.STICK
-                && entity instanceof Tameable
-                && player.equals(((Tameable)entity).getOwner())) {
+        if (items.getType() == Material.STICK && entity instanceof Tameable
+                && player.equals(((Tameable) entity).getOwner())) {
             event.setCancelled(true);
-            ((Tameable)entity).setOwner(null);
+            ((Tameable) entity).setOwner(null);
             return;
         }
 
         if (entity instanceof Ageable
-                && isBreedableWith((Ageable)entity, items.getType())) {
+                && isBreedableWith((Ageable) entity, items.getType())) {
 
             if (hasArrears(player)) {
                 messages.send(player, "mobTaxBreedHasArrears");
-            } else if (! (entity instanceof Tameable && ((Tameable)entity).isTamed())
-                    && ! isInPlayersLand(player, entity.getLocation())) {
+            } else if (!(entity instanceof Tameable
+                    && ((Tameable) entity).isTamed())
+                    && !isInPlayersLand(player, entity.getLocation())) {
                 messages.send(player, "mobTaxBreedNoRegion");
             } else {
                 return;
@@ -303,28 +315,28 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
 
             event.setCancelled(true);
             event.getPlayer().updateInventory();
-            
+
             return;
         }
-    }       
+    }
 
     public boolean isBreedableWith(Ageable ageable, Material material) {
-        if (! ageable.canBreed()) {
+        if (!ageable.canBreed()) {
             return false;
         }
-        
+
         if (ageable instanceof Chicken) {
             return material.equals(Material.SEEDS);
         }
 
-        if (ageable instanceof Sheep|| ageable instanceof Cow) {
+        if (ageable instanceof Sheep || ageable instanceof Cow) {
             return material.equals(Material.WHEAT);
         }
-        
+
         if (ageable instanceof Pig) {
             return material.equals(Material.CARROT_ITEM);
         }
-        
+
         if (ageable instanceof Wolf) {
             switch (material) {
             case COOKED_BEEF:
@@ -337,7 +349,7 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
                 return false;
             }
         }
-        
+
         if (ageable instanceof Ocelot) {
             return material.equals(Material.RAW_FISH);
         }
@@ -355,18 +367,20 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
         Player player = event.getPlayer();
         if (hasArrears(player)) {
             messages.send(player, "mobTaxBreedHasArrears");
-        } else if (! isInPlayersLand(player, event.getEgg().getLocation())) {
+        } else if (!isInPlayersLand(player, event.getEgg().getLocation())) {
             messages.send(player, "mobTaxBreedNoRegion");
         } else {
             return;
         }
-        event.setNumHatches((byte)0);
+        event.setNumHatches((byte) 0);
     }
 
     boolean isInPlayersLand(Player player, Location location) {
         UUID playerId = player.getUniqueId();
-        ProtectedRegion region = regionManager.getHighestPriorityRegion(location);
-        return region != null && regionManager.getOwners(region).contains(playerId);
+        ProtectedRegion region = regionManager
+                .getHighestPriorityRegion(location);
+        return region != null
+                && regionManager.getOwners(region).contains(playerId);
     }
 
     boolean hasArrears(Player player) {
@@ -380,9 +394,9 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
         if (event.isCancelled()) {
             return;
         }
-        
+
         Entity entity = event.getEntity();
-        
+
         switch (event.getSpawnReason()) {
         case DISPENSE_EGG:
             event.setCancelled(true);
@@ -392,18 +406,18 @@ public class LivestockTaxCollector extends PeriodicTaxCollector implements Liste
             break;
 
         default:
-            return;   
-        }
-
-        if (! (entity instanceof Animals)) {
             return;
         }
 
-        ProtectedRegion region = regionManager.getHighestPriorityRegion(event.getLocation());
-        if (region != null && ! taxExempt.contains(region.getId())) {
+        if (!(entity instanceof Animals)) {
+            return;
+        }
+
+        ProtectedRegion region = regionManager
+                .getHighestPriorityRegion(event.getLocation());
+        if (region != null && !taxExempt.contains(region.getId())) {
             logger.info("%s spawn cancelled in %s @ %s:%d,%d,%d",
-                    entity.getClass().getName(),
-                    region.getId(),
+                    entity.getClass().getName(), region.getId(),
                     event.getLocation().getWorld().getName(),
                     event.getLocation().getBlockX(),
                     event.getLocation().getBlockY(),
