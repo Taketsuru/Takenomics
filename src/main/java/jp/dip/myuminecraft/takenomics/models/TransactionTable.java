@@ -83,23 +83,15 @@ public class TransactionTable {
 
         shopTable.put(connection, shop);
 
-        connection.setAutoCommit(false);
-        try {
-            int shopId = shopTable.getId(connection, shop.world, shop.x,
-                    shop.y, shop.z);
-            insertTransaction.setInt(1, shopId);
-            int playerId = playerTable.getId(connection, player);
-            insertTransaction.setInt(2, playerId);
-            insertTransaction.setString(3, type.toString().toLowerCase());
-            insertTransaction.setInt(4, amount);
-            insertTransaction.executeUpdate();
-            connection.commit();
-        } catch (SQLException e) {
-            connection.rollback();
-            throw e;
-        } finally {
-            connection.setAutoCommit(true);
-        }
+        int shopId = shopTable.getId(connection, shop.world, shop.x,
+                shop.y, shop.z);
+        int playerId = playerTable.getId(connection, player);
+
+        insertTransaction.setInt(1, shopId);
+        insertTransaction.setInt(2, playerId);
+        insertTransaction.setString(3, type.toString().toLowerCase());
+        insertTransaction.setInt(4, amount);
+        insertTransaction.executeUpdate();
     }
 
     void setupTable(Connection connection) throws SQLException {
