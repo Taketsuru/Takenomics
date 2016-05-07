@@ -177,6 +177,8 @@ public class HopperTaxCollector extends PeriodicTaxCollector
 
     @Override
     protected boolean prepareCollection() {
+        long startTime = System.nanoTime();
+
         if (investigationIndex < 0) {
             for (World world : Bukkit.getServer().getWorlds()) {
                 for (Chunk chunk : world.getLoadedChunks()) {
@@ -191,8 +193,7 @@ public class HopperTaxCollector extends PeriodicTaxCollector
             investigationIndex = 0;
         }
 
-        long startTime = System.nanoTime();
-        long maxCollectionTime = 10 * 1000 * 1000; // 10ms
+        long maxCollectionTime = 20 * 1000 * 1000; // 20ms
         while (investigationIndex < investigationList.size()) {
             if (startTime + maxCollectionTime <= System.nanoTime()) {
                 return false;
