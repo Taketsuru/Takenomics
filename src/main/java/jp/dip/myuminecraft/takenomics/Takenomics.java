@@ -224,6 +224,11 @@ public class Takenomics extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (hopperTaxCollector != null) {
+            hopperTaxCollector.disable();
+            hopperTaxCollector = null;
+        }
+
         if (livestockTaxCollector != null) {
             livestockTaxCollector.disable();
             livestockTaxCollector = null;

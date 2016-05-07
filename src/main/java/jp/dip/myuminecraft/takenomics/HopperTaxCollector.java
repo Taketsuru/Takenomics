@@ -3,7 +3,6 @@ package jp.dip.myuminecraft.takenomics;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -11,6 +10,7 @@ import java.util.UUID;
 
 import net.milkbowl.vault.economy.Economy;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -24,12 +24,8 @@ import org.bukkit.block.Hopper;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
-import org.bukkit.event.world.ChunkLoadEvent;
-import org.bukkit.event.world.ChunkUnloadEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -73,17 +69,15 @@ public class HopperTaxCollector extends PeriodicTaxCollector
         }
     }
 
-    Messages                   messages;
-    TaxLogger                  taxLogger;
-    TaxTable                   taxTable;
-    Economy                    economy;
-    RegionManager              regionManager;
-    Map<UUID, PayerInfo>       payersTable;
-    Set<String>                taxFreeRegions;
-    Map<Chunk, List<Location>> hopperLocations;
-    Iterator<List<Location>>   chunksWithHoppersIter;
-    Iterator<Location>         hoppersInChunkIter;
-    boolean                    investigating;
+    Messages             messages;
+    TaxLogger            taxLogger;
+    TaxTable             taxTable;
+    Economy              economy;
+    RegionManager        regionManager;
+    Map<UUID, PayerInfo> payersTable;
+    Set<String>          taxFreeRegions;
+    int                  investigationIndex;
+    List<Chunk>          investigationList;
 
     public HopperTaxCollector(JavaPlugin plugin, Logger logger,
             Messages messages, TaxLogger taxLogger, Economy economy,
@@ -96,51 +90,24 @@ public class HopperTaxCollector extends PeriodicTaxCollector
         taxTable = new TaxTable();
         payersTable = new HashMap<UUID, PayerInfo>();
         taxFreeRegions = new HashSet<String>();
-        hopperLocations = new HashMap<Chunk, List<Location>>();
-        chunksWithHoppersIter = null;
-        hoppersInChunkIter = null;
-        investigating = false;
+        investigationList = new ArrayList<Chunk>();
+        investigationIndex = -1;
     }
 
     public void enable() {
         super.loadConfig(logger, plugin.getConfig(), "hopperTax",
                 "hopper tax");
-
-        if (enable) {
-            int chunkCount = 0;
-            int hopperCount = 0;
-            for (World world : plugin.getServer().getWorlds()) {
-                Chunk[] chunks = world.getLoadedChunks();
-                chunkCount += chunks.length;
-                for (int i = 0; i < chunks.length; ++i) {
-                    findAllHoppersInChunk(chunks[i]);
-                    if (hopperLocations.containsKey(chunks[i])) {
-                        hopperCount += hopperLocations.get(chunks[i]).size();
-                    }
-                }
-            }
-            logger.info("Found %d hoppers in %d chunks.", hopperCount,
-                    chunkCount);
-
-            plugin.getServer().getPluginManager().registerEvents(this, plugin);
-        } else {
-            taxTable.clear();
-            taxFreeRegions.clear();
-            hopperLocations.clear();
+        if (!enable) {
+            return;
         }
+
+        plugin.getServer().getPluginManager().registerEvents(this, plugin);
     }
 
-    @EventHandler
-    public void onChunkLoadEvent(ChunkLoadEvent event) {
-        findAllHoppersInChunk(event.getChunk());
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onChunkUnloadEvent(ChunkUnloadEvent event) {
-        Chunk chunk = event.getChunk();
-        if (hopperLocations.remove(chunk) != null) {
-            restartInvestigation();
-        }
+    public void disable() {
+        investigationList.clear();
+        taxTable.clear();
+        taxFreeRegions.clear();
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -179,46 +146,6 @@ public class HopperTaxCollector extends PeriodicTaxCollector
         }
     }
 
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void didBlockPlacement(BlockPlaceEvent event) {
-        Block block = event.getBlock();
-        if (block.getType() != Material.HOPPER) {
-            return;
-        }
-
-        Chunk chunk = block.getChunk();
-        List<Location> list = hopperLocations.get(chunk);
-        if (list == null) {
-            list = new ArrayList<Location>();
-            hopperLocations.put(chunk, list);
-        }
-        list.add(block.getLocation());
-
-        restartInvestigation();
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void didBlockBreak(BlockBreakEvent event) {
-        Block block = event.getBlock();
-        if (block.getType() != Material.HOPPER) {
-            return;
-        }
-
-        Chunk chunk = block.getChunk();
-        List<Location> list = hopperLocations.get(chunk);
-        if (list == null) {
-            return;
-        }
-
-        if (list.size() == 1) {
-            hopperLocations.remove(chunk);
-        } else {
-            list.remove(block.getLocation());
-        }
-
-        restartInvestigation();
-    }
-
     protected boolean loadConfig(Logger logger, FileConfiguration config,
             String configPrefix, boolean error) {
         boolean result = super.loadConfig(logger, config, configPrefix, error);
@@ -250,26 +177,77 @@ public class HopperTaxCollector extends PeriodicTaxCollector
 
     @Override
     protected boolean prepareCollection() {
-        investigating = true;
+        if (investigationIndex < 0) {
+            for (World world : Bukkit.getServer().getWorlds()) {
+                for (Chunk chunk : world.getLoadedChunks()) {
+                    investigationList.add(chunk);
+                }
+            }
+
+            if (investigationList.isEmpty()) {
+                return true;
+            }
+
+            investigationIndex = 0;
+        }
 
         long startTime = System.nanoTime();
         long maxCollectionTime = 10 * 1000 * 1000; // 10ms
-        boolean result = false;
-        while (!result && System.nanoTime() - startTime < maxCollectionTime) {
-            result = investigate();
-        }
-
-        if (result) {
-            Server server = plugin.getServer();
-            for (Map.Entry<UUID, PayerInfo> entry : payersTable.entrySet()) {
-                if (!entry.getValue().hoppers.isEmpty()) {
-                    addPayer(server.getOfflinePlayer(entry.getKey()));
-                }
+        while (investigationIndex < investigationList.size()) {
+            if (startTime + maxCollectionTime <= System.nanoTime()) {
+                return false;
             }
-            investigating = false;
+
+            Chunk chunk = investigationList.get(investigationIndex);
+            ++investigationIndex;
+            if (!chunk.isLoaded()) {
+                continue;
+            }
+
+            for (BlockState state : chunk.getTileEntities()) {
+                if (!(state instanceof Hopper)) {
+                    continue;
+                }
+
+                Location location = state.getLocation();
+
+                ProtectedRegion region = regionManager
+                        .getHighestPriorityRegion(location);
+                if (region == null) {
+                    continue;
+                }
+
+                if (taxFreeRegions.contains(region.getId())) {
+                    continue;
+                }
+
+                List<UUID> owners = regionManager.getOwners(region);
+                if (owners.isEmpty()) {
+                    continue;
+                }
+
+                UUID primaryOwner = owners.get(0);
+                PayerInfo info = payersTable.get(primaryOwner);
+                if (info == null) {
+                    info = new PayerInfo();
+                    payersTable.put(primaryOwner, info);
+                }
+
+                info.hoppers.add(location);
+            }
         }
 
-        return result;
+        Server server = plugin.getServer();
+        for (Map.Entry<UUID, PayerInfo> entry : payersTable.entrySet()) {
+            if (!entry.getValue().hoppers.isEmpty()) {
+                addPayer(server.getOfflinePlayer(entry.getKey()));
+            }
+        }
+
+        investigationList.clear();
+        investigationIndex = -1;
+
+        return true;
     }
 
     @Override
@@ -306,7 +284,7 @@ public class HopperTaxCollector extends PeriodicTaxCollector
         }
 
         Player onlinePlayer = payer.isOnline() ? payer.getPlayer() : null;
-        if (onlinePlayer != null && 0.0 < tax) {
+        if (onlinePlayer != null && (0.0 < tax || 0 < penalty)) {
             messages.send(onlinePlayer, "hopperTaxNoticeHeader");
             messages.send(onlinePlayer, "hopperTaxNoticeCount", charge);
             if (0 < penalty) {
@@ -331,21 +309,27 @@ public class HopperTaxCollector extends PeriodicTaxCollector
                     payer, charge, rate, arrears, paid));
         }
 
-        boolean showSeisuredHopper = penalty < 8;
+        int messageCount = 0;
+        int removeCount = 0;
         for (Location location : info.hoppers) {
-            if (penalty == 0) {
+            if (penalty <= removeCount) {
                 break;
             }
-            if (showSeisuredHopper && onlinePlayer != null) {
+            if (messageCount < 8 && onlinePlayer != null) {
                 messages.send(onlinePlayer, "seisuredHopperLocation",
                         location.getWorld().getName(), location.getBlockX(),
                         location.getBlockY(), location.getBlockZ());
+                ++messageCount;
             }
             logger.info("seisured hopper @ %s:%d,%d,%d",
                     location.getWorld().getName(), location.getBlockX(),
                     location.getBlockY(), location.getBlockZ());
             removeHopper(location);
-            --penalty;
+            ++removeCount;
+        }
+        
+        if (messageCount < removeCount && onlinePlayer != null) {
+            messages.send(onlinePlayer, "moreSeisuredHoppers", removeCount - messageCount);
         }
 
         info.hoppers.clear();
@@ -358,81 +342,8 @@ public class HopperTaxCollector extends PeriodicTaxCollector
         return arrears == 0.0;
     }
 
-    void restartInvestigation() {
-        if (!investigating) {
-            return;
-        }
-        chunksWithHoppersIter = null;
-        hoppersInChunkIter = null;
-        for (PayerInfo payer : payersTable.values()) {
-            payer.hoppers.clear();
-        }
-    }
-
-    void findAllHoppersInChunk(Chunk chunk) {
-        List<Location> hoppers = new ArrayList<Location>();
-        assert !hopperLocations.containsKey(chunk);
-
-        for (BlockState state : chunk.getTileEntities()) {
-            if (state instanceof Hopper) {
-                hoppers.add(state.getLocation());
-            }
-        }
-
-        if (!hoppers.isEmpty()) {
-            hopperLocations.put(chunk, hoppers);
-            restartInvestigation();
-        }
-    }
-
-    boolean investigate() {
-        while (hoppersInChunkIter == null || !hoppersInChunkIter.hasNext()) {
-            hoppersInChunkIter = null;
-
-            if (chunksWithHoppersIter == null) {
-                chunksWithHoppersIter = hopperLocations.values().iterator();
-            }
-
-            if (!chunksWithHoppersIter.hasNext()) {
-                chunksWithHoppersIter = null;
-                return true;
-            }
-
-            hoppersInChunkIter = chunksWithHoppersIter.next().iterator();
-        }
-
-        Location location = hoppersInChunkIter.next();
-
-        ProtectedRegion region = regionManager
-                .getHighestPriorityRegion(location);
-        if (region == null) {
-            return false;
-        }
-
-        if (taxFreeRegions.contains(region.getId())) {
-            return false;
-        }
-
-        List<UUID> owners = regionManager.getOwners(region);
-        if (owners.isEmpty()) {
-            return false;
-        }
-
-        UUID primaryOwner = owners.get(0);
-        PayerInfo info = payersTable.get(primaryOwner);
-        if (info == null) {
-            info = new PayerInfo();
-            payersTable.put(primaryOwner, info);
-        }
-
-        info.hoppers.add(location);
-
-        return false;
-    }
-
     void removeHopper(Location location) {
         Block block = location.getBlock();
-        hopperLocations.get(block.getChunk()).remove(location);
         if (block.getType() != Material.HOPPER) {
             return;
         }
