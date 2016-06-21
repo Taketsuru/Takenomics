@@ -146,6 +146,7 @@ public class HopperTaxCollector extends PeriodicTaxCollector
         }
     }
 
+    @Override
     protected boolean loadConfig(Logger logger, FileConfiguration config,
             String configPrefix, boolean error) {
         boolean result = super.loadConfig(logger, config, configPrefix, error);
@@ -261,7 +262,7 @@ public class HopperTaxCollector extends PeriodicTaxCollector
         double tax = Math.floor(charge * rate + arrears);
         double balance = economy.getBalance(payer);
         long penalty = 0;
-        while (balance < tax && penalty <= charge) {
+        while (0 < tax && balance < tax && penalty <= charge) {
             ++penalty;
             rate = taxTable.getRate(charge - penalty);
             tax = Math.floor((charge - penalty) * rate + arrears);
@@ -328,9 +329,10 @@ public class HopperTaxCollector extends PeriodicTaxCollector
             removeHopper(location);
             ++removeCount;
         }
-        
+
         if (messageCount < removeCount && onlinePlayer != null) {
-            messages.send(onlinePlayer, "moreSeisuredHoppers", removeCount - messageCount);
+            messages.send(onlinePlayer, "moreSeisuredHoppers",
+                    removeCount - messageCount);
         }
 
         info.hoppers.clear();
