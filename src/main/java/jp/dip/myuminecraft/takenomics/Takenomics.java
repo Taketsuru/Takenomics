@@ -66,7 +66,6 @@ public class Takenomics extends JavaPlugin {
             permission = getPermissionProvider();
 
             WorldGuardPlugin worldGuard = getWorldGuard();
-            WorldEdit worldEdit = WorldEdit.getInstance();
 
             commandDispatcher = new CommandDispatcher(messages,
                     "takenomics.command.");
@@ -156,7 +155,7 @@ public class Takenomics extends JavaPlugin {
                     && playerTable != null) {
                 landRentalManager = new LandRentalManager(this, logger,
                         messages, economy, permission, database, regionManager,
-                        playerTable, worldTable, worldEdit, worldGuard);
+                        playerTable, worldTable);
                 landRentalManager.enable();
             }
 
@@ -237,17 +236,13 @@ public class Takenomics extends JavaPlugin {
         return permissionProvider.getProvider();
     }
 
-    WorldGuardPlugin getWorldGuard() throws Exception {
-        Plugin result = getServer().getPluginManager().getPlugin("WorldGuard");
-
+    static WorldGuardPlugin getWorldGuard() throws Exception {
+        Plugin result = Bukkit.getPluginManager().getPlugin("WorldGuard");
         if (result == null || !(result instanceof WorldGuardPlugin)) {
-            String msg = String.format("No WorldGuard found!  Disabled %s.",
-                    getName());
-            throw new Exception(msg);
+            throw new Exception("No WorldGuard found.");
         }
 
         return (WorldGuardPlugin) result;
-
     }
 
     @Override

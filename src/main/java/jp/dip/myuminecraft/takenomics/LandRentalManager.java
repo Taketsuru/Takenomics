@@ -157,9 +157,9 @@ public class LandRentalManager implements Listener, SignTableListener {
             if (!(arg instanceof SignLocation)) {
                 return false;
             }
-            SignLocation argloc = (SignLocation) arg;
-            return worldName.equals(argloc.worldName) && x == argloc.x
-                    && y == argloc.y && z == argloc.z;
+            SignLocation loc = (SignLocation) arg;
+            return worldName.equals(loc.worldName) && x == loc.x && y == loc.y
+                    && z == loc.z;
         }
 
         @Override
@@ -186,19 +186,17 @@ public class LandRentalManager implements Listener, SignTableListener {
 
     static final int              currentRentalSchemaVersion   = 1;
     static final int              currentContractSchemaVersion = 1;
-    static final long             maxUpdaterExecutionTime      = 20;
+    static final long             maxTaskExecutionTime         = 20;
     static final String           header                       = "[re.rental]";
     static final String           permNodeToCreateSign         = "takenomics.land_rental.create";
     static final String           permNodeToCreateSignOwn      = "takenomics.land_rental.create.own";
     static final int              maxFee                       = 9999999;
-    static final int              maxMaxPrepayment             = 99;
+    static final int              maxMaxPrepayment             = 9;
     static final Pattern          feePattern                   = Pattern
             .compile("^\\$?[ ]*([1-9][0-9]*)([ ]*/[ ]*[^0-9]*)?$");
     static final Pattern          maxPrepaymentPattern         = Pattern
             .compile("^[ ]*\\+?[ ]*([1-9][0-9]*)[ ]*$");
     static final int              dailyMaintenanceTime         = 8;
-    static final Pattern          datePattern                  = Pattern
-            .compile("([0-9][0-9][0-9][0-9])-([0-9][0-9])-([0-9][0-9])");
     static final SimpleDateFormat dateFormat                   = new SimpleDateFormat(
             "yyyy-MM-dd");
 
@@ -214,8 +212,6 @@ public class LandRentalManager implements Listener, SignTableListener {
     String                        contractTableName;
     PlayerTable                   playerTable;
     WorldTable                    worldTable;
-    WorldEdit                     worldEdit;
-    WorldGuardPlugin              worldGuard;
     SnapshotRepository            snapshotRepository;
     Map<SignLocation, Rental>     signLocationToRental         = new HashMap<>();
     Map<String, Rental>           rentals                      = new HashMap<>();
@@ -224,8 +220,7 @@ public class LandRentalManager implements Listener, SignTableListener {
     public LandRentalManager(JavaPlugin plugin, Logger logger,
             Messages messages, Economy economy, Permission permission,
             Database database, RegionManager regionManager,
-            PlayerTable playerTable, WorldTable worldTable,
-            WorldEdit worldEdit, WorldGuardPlugin worldGuard) {
+            PlayerTable playerTable, WorldTable worldTable) {
         this.plugin = plugin;
         this.logger = logger;
         this.messages = messages;
@@ -235,8 +230,6 @@ public class LandRentalManager implements Listener, SignTableListener {
         this.regionManager = regionManager;
         this.playerTable = playerTable;
         this.worldTable = worldTable;
-        this.worldEdit = worldEdit;
-        this.worldGuard = worldGuard;
     }
 
     public void enable() throws Throwable {
@@ -244,7 +237,7 @@ public class LandRentalManager implements Listener, SignTableListener {
                 .getPlugin("TakeCore");
         signTable = takeCore.getSignTable();
 
-        LocalConfiguration config = worldEdit.getConfiguration();
+        LocalConfiguration config = WorldEdit.getInstance().getConfiguration();
         if (config.snapshotRepo == null) {
             throw new Exception(
                     "WorldEdit snapshot repository is not configured.");
@@ -266,7 +259,7 @@ public class LandRentalManager implements Listener, SignTableListener {
         });
 
         signTable.addListener(this);
-        Bukkit.getPluginManager().registerEvents(this, plugin);        
+        Bukkit.getPluginManager().registerEvents(this, plugin);
     }
 
     public void disable() {
@@ -283,8 +276,6 @@ public class LandRentalManager implements Listener, SignTableListener {
             return true;
         }
 
-        // XXX
-        logger.warning(String.format("mayCreate: player %s", player));
         boolean perm = player.hasPermission(permNodeToCreateSign);
         boolean permOwn = player.hasPermission(permNodeToCreateSignOwn);
         if (!perm && !permOwn) {
@@ -301,8 +292,6 @@ public class LandRentalManager implements Listener, SignTableListener {
         World world = attachedLocation.getWorld();
         String worldName = world.getName();
         String regionName = foundRegion.getId();
-        // XXX
-        logger.warning(String.format("mayCreate: world %s, region %s", worldName, regionName));
         Rental rental = findRental(worldName, regionName);
         if (rental != null && hasSign(rental)) {
             messages.send(player, "landRentalAlreadyRented");
@@ -326,8 +315,6 @@ public class LandRentalManager implements Listener, SignTableListener {
                     location.getWorld().getName(), location.getBlockX(),
                     location.getBlockY(), location.getBlockZ()));
             if (rental == null) {
-                // XXX
-                logger.warning("create: player == null && rental == null");
                 clearSign(location.getBlock());
                 return null;
             }
@@ -354,8 +341,6 @@ public class LandRentalManager implements Listener, SignTableListener {
         } else {
             ProtectedRegion region = findRegion(player, attachedLocation);
             if (region == null) {
-                // XXX
-                logger.warning("create: player != null && region == null");
                 clearSign(lines);
                 return null;
             }
@@ -363,8 +348,6 @@ public class LandRentalManager implements Listener, SignTableListener {
             String worldName = attachedLocation.getWorld().getName();
             String regionName = region.getId();
             rental = findRental(worldName, regionName);
-            // XXX
-            logger.warning("create: world %s, region %s", worldName, regionName);
 
             int intValue = 0;
             if (lines[1].length() != 0) {
@@ -518,6 +501,7 @@ public class LandRentalManager implements Listener, SignTableListener {
         Rental rental = sign.rental;
         Contract contract = rental.currentContract;
 
+        WorldGuardPlugin worldGuard = WorldGuardPlugin.inst();
         Player player = event.getPlayer();
         BukkitPlayer wgPlayer = new BukkitPlayer(worldGuard, player);
         com.sk89q.worldguard.protection.managers.RegionManager wgRegionManager = worldGuard
@@ -566,7 +550,7 @@ public class LandRentalManager implements Listener, SignTableListener {
 
     ProtectedRegion findRegion(Player player, Location attachedLocation) {
         boolean perm = player.hasPermission(permNodeToCreateSign);
-
+        WorldGuardPlugin worldGuard = WorldGuardPlugin.inst();
         com.sk89q.worldguard.protection.managers.RegionManager wgRegionManager = worldGuard
                 .getRegionManager(attachedLocation.getWorld());
         BukkitPlayer wgPlayer = new BukkitPlayer(worldGuard, player);
@@ -583,6 +567,10 @@ public class LandRentalManager implements Listener, SignTableListener {
 
                     for (ProtectedRegion region : wgRegionManager
                             .getApplicableRegions(rgLocation)) {
+                        if (region.getId().equals("__global__")) {
+                            continue;
+                        }
+                        
                         int regionPriority = region.getPriority();
                         if (regionPriority <= currentPriority) {
                             continue;
@@ -759,6 +747,7 @@ public class LandRentalManager implements Listener, SignTableListener {
         pay(rental.worldName, rental.regionName, rental.fee);
 
         World world = Bukkit.getWorld(rental.worldName);
+        WorldGuardPlugin worldGuard = WorldGuardPlugin.inst();
         com.sk89q.worldguard.protection.managers.RegionManager wgRegionManager = worldGuard
                 .getRegionManager(world);
         ProtectedRegion region = wgRegionManager.getRegion(rental.regionName);
@@ -793,10 +782,10 @@ public class LandRentalManager implements Listener, SignTableListener {
                     try (PreparedStatement stmt = connection.prepareStatement(
                             String.format(
                                     "INSERT INTO %s "
-                                    + "(region, world, state, tenant, expiration, prepayment) "
-                                    + "SELECT ?, world.id, 'effective', player.id, ?, 0 "
-                                    + "FROM %s AS world JOIN %s AS player "
-                                    + "WHERE world.name = ? AND player.uuid = ?",
+                                            + "(region, world, state, tenant, expiration, prepayment) "
+                                            + "SELECT ?, world.id, 'effective', player.id, ?, 0 "
+                                            + "FROM %s AS world JOIN %s AS player "
+                                            + "WHERE world.name = ? AND player.uuid = ?",
                                     contractTableName,
                                     worldTable.getTableName(),
                                     playerTable.getTableName()),
@@ -835,15 +824,16 @@ public class LandRentalManager implements Listener, SignTableListener {
     void terminateContract(TerminatedContract contract) throws Exception {
         World world = Bukkit.getServer().getWorld(contract.worldName);
 
+        WorldGuardPlugin worldGuard = WorldGuardPlugin.inst();
         com.sk89q.worldguard.protection.managers.RegionManager wgRegionManager = worldGuard
                 .getRegionManager(world);
-
-        BukkitWorld weWorld = new BukkitWorld(world);
-        EditSession editSession = worldEdit.getEditSessionFactory()
-                .getEditSession(weWorld, -1);
-
         ProtectedRegion protectedRegion = wgRegionManager
                 .getRegion(contract.regionName);
+
+        BukkitWorld weWorld = new BukkitWorld(world);
+        EditSession editSession = WorldEdit.getInstance()
+                .getEditSessionFactory()
+                .getEditSession((com.sk89q.worldedit.world.World) weWorld, -1);
 
         DefaultDomain members = protectedRegion.getMembers();
         members.clear();
@@ -868,7 +858,7 @@ public class LandRentalManager implements Listener, SignTableListener {
                     + protectedRegion.getClass().getCanonicalName());
         }
 
-        LocalConfiguration config = worldEdit.getConfiguration();
+        LocalConfiguration config = WorldEdit.getInstance().getConfiguration();
         Snapshot snapshot = config.snapshotRepo.getSnapshot(String
                 .format("%s/%s", contract.worldName, contract.creationDate));
         ChunkStore chunkStore = snapshot.getChunkStore();
@@ -1096,9 +1086,6 @@ public class LandRentalManager implements Listener, SignTableListener {
                 byte[] tenantId = rs.getBytes(9);
                 String expiration = rs.getString(10);
                 int prepayment = rs.getInt(11);
-                // XXX
-                logger.warning(String.format("loadRentals: world %s, region %s, [%d,%d,%d], %s, %d, %d",
-                        worldName, regionName, x, y, z, rentalState, fee, maxPrepayment));
 
                 Rental rental = new Rental(worldName, regionName, rentalState,
                         x, y, z, fee, maxPrepayment);
@@ -1167,7 +1154,7 @@ public class LandRentalManager implements Listener, SignTableListener {
             @Override
             public void run() {
                 long timeLimit = System.currentTimeMillis()
-                        + maxUpdaterExecutionTime;
+                        + maxTaskExecutionTime;
                 do {
                     TerminatedContract contract = worklist.poll();
                     if (contract == null) {
@@ -1195,8 +1182,8 @@ public class LandRentalManager implements Listener, SignTableListener {
 
     void pay(String worldName, String regionName, double fee) {
         World world = Bukkit.getWorld(worldName);
-        com.sk89q.worldguard.protection.managers.RegionManager wgRegionManager = worldGuard
-                .getRegionManager(world);
+        com.sk89q.worldguard.protection.managers.RegionManager wgRegionManager = WorldGuardPlugin
+                .inst().getRegionManager(world);
         ProtectedRegion region = wgRegionManager.getRegion(regionName);
         DefaultDomain owners = region.getOwners();
 
@@ -1232,20 +1219,14 @@ public class LandRentalManager implements Listener, SignTableListener {
                     .getString("landRentalState_" + rental.state.toString());
         } else {
             Calendar endDate = Calendar.getInstance();
-            // XXX
-            logger.info("endDate=%s before set, contract.expiration=%s", endDate.toString(),
-                    contract.expiration);
             try {
                 endDate.setTime(dateFormat.parse(contract.expiration));
-                // XXX
-                logger.info("endDate=%s after set", endDate.toString());
             } catch (ParseException e) {
-                throw new AssertionError(String.format("invalid date format: %s", contract.expiration));
+                throw new AssertionError(String.format(
+                        "invalid date format: %s", contract.expiration));
             }
             endDate.add(Calendar.DAY_OF_MONTH, -1);
             endDate.add(Calendar.DAY_OF_MONTH, contract.prepayment * 7);
-            // XXX
-            logger.info("endDate=%s added", endDate.toString());
             lines[2] = rental.state == RentalState.READY
                     ? String.format(
                             messages.getString(

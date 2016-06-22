@@ -1,8 +1,15 @@
 name: Takenomics
 main: jp.dip.myuminecraft.takenomics.Takenomics
 version: "${project.version}"
-depend: [Vault, WorldGuard, Essentials, TakeCore]
+depend: [Vault, WorldEdit, WorldGuard, Essentials, TakeCore]
 softdepend: [ChestShop]
 commands:
   takenomics:
     usage: /takenomics <subcommand> ...
+permissions:
+  takenomics.land_rental.create:
+    description: Allows non-owner player to create a land rental sign on a region
+    default: op
+  takenomics.land_rental.create.own:
+    description: Allows a player to create a land rental sign on his/her region
+    default: true
