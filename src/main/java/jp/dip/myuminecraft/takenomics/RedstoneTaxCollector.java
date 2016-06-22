@@ -62,17 +62,15 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
     TaxLogger                     taxLogger;
     TaxTable                      taxTable       = new TaxTable();
     Economy                       economy;
-    RegionManager                 regionManager;
     Map<OfflinePlayer, PayerInfo> payersTable    = new HashMap<OfflinePlayer, PayerInfo>();
     Set<String>                   taxFreeRegions = new HashSet<String>();
 
     public RedstoneTaxCollector(JavaPlugin plugin, Logger logger, Messages messages,
-            TaxLogger taxLogger, Economy economy, RegionManager regionManager) {
+            TaxLogger taxLogger, Economy economy) {
         super(plugin, logger);
         this.messages = messages;
         this.taxLogger = taxLogger;
         this.economy = economy;
-        this.regionManager = regionManager;
     }
     
     public void enable() {
@@ -119,12 +117,12 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
         }
 
         Location loc = event.getBlock().getLocation();
-        ProtectedRegion region = regionManager.getHighestPriorityRegion(loc);
+        ProtectedRegion region = RegionUtil.getHighestPriorityRegion(loc);
         if (region == null || taxFreeRegions.contains(region.getId())) {
             return;
         }
 
-        Collection<UUID> owners = regionManager.getOwners(region);       
+        Collection<UUID> owners = RegionUtil.getOwners(region);       
         Server server = plugin.getServer();
         for (UUID ownerUUID : owners) {
             OfflinePlayer owner = server.getOfflinePlayer(ownerUUID);
@@ -164,14 +162,14 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
     void cancelIfThereIsArrears(BlockPhysicsEvent event) {
         Location loc = event.getBlock().getLocation();
 
-        ProtectedRegion region = regionManager.getHighestPriorityRegion(loc);
+        ProtectedRegion region = RegionUtil.getHighestPriorityRegion(loc);
         boolean paid = false;
         if (region != null) {
             if (taxFreeRegions.contains(region.getId())) {
                 paid = true;
             } else {  
                 Server server = plugin.getServer();
-                for (UUID uuid : regionManager.getOwners(region)) {
+                for (UUID uuid : RegionUtil.getOwners(region)) {
                     OfflinePlayer player = server.getOfflinePlayer(uuid);
                     PayerInfo record = payersTable.get(player);
                     if (record == null || record.arrears == 0.0) {

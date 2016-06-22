@@ -21,36 +21,28 @@ import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.plugin.Plugin;
-import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
-
-import com.sk89q.worldedit.WorldEdit;
-import com.sk89q.worldguard.bukkit.WorldGuardPlugin;
 
 public class Takenomics extends JavaPlugin {
 
-    Logger                logger;
-    Messages              messages;
-    CommandDispatcher     commandDispatcher;
-    SignScanner           signScanner;
-    Database              database;
-    PlayerTable           playerTable;
-    WorldTable            worldTable;
-    AccessLog             accessLog;
-    ShopTable             shopTable;
-    TransactionTable      transactionTable;
-    TaxLogger             taxLogger;
-    Economy               economy;
-    Permission            permission;
-    RegionManager         regionManager;
-    TaxOnSavingsCollector taxOnSavingsCollector;
-    RedstoneTaxCollector  redstoneTaxCollector;
-    ShopMonitor           chestShopMonitor;
-    LivestockTaxCollector livestockTaxCollector;
-    HopperTaxCollector    hopperTaxCollector;
-    EssentialsShopMonitor essentialsShopMonitor;
-    LandRentalManager     landRentalManager;
+    private Logger                logger;
+    private Messages              messages;
+    private CommandDispatcher     commandDispatcher;
+    private SignScanner           signScanner;
+    private Database              database;
+    private PlayerTable           playerTable;
+    private WorldTable            worldTable;
+    private AccessLog             accessLog;
+    private ShopTable             shopTable;
+    private TransactionTable      transactionTable;
+    private TaxLogger             taxLogger;
+    private TaxOnSavingsCollector taxOnSavingsCollector;
+    private RedstoneTaxCollector  redstoneTaxCollector;
+    private ShopMonitor           chestShopMonitor;
+    private LivestockTaxCollector livestockTaxCollector;
+    private HopperTaxCollector    hopperTaxCollector;
+    private EssentialsShopMonitor essentialsShopMonitor;
+    private LandRentalManager     landRentalManager;
 
     @Override
     public void onEnable() {
@@ -62,10 +54,16 @@ public class Takenomics extends JavaPlugin {
                     .getLocale(getConfig().getString("locale"));
             messages = new Messages(
                     ResourceBundle.getBundle("messages", locale), locale);
-            economy = getEconomyProvider();
-            permission = getPermissionProvider();
 
-            WorldGuardPlugin worldGuard = getWorldGuard();
+            // Vault
+            Economy economy = Bukkit.getServicesManager()
+                    .getRegistration(net.milkbowl.vault.economy.Economy.class)
+                    .getProvider();
+            Permission permission = Bukkit.getServicesManager()
+                    .getRegistration(
+                            net.milkbowl.vault.permission.Permission.class)
+                    .getProvider();
+            ;
 
             commandDispatcher = new CommandDispatcher(messages,
                     "takenomics.command.");
@@ -132,35 +130,33 @@ public class Takenomics extends JavaPlugin {
             }
 
             taxLogger = new TaxLogger(this);
-            regionManager = new RegionManager(this, logger, playerTable,
-                    worldGuard);
 
             taxOnSavingsCollector = new TaxOnSavingsCollector(this, logger,
                     messages, taxLogger, economy);
             taxOnSavingsCollector.enable();
 
             redstoneTaxCollector = new RedstoneTaxCollector(this, logger,
-                    messages, taxLogger, economy, regionManager);
+                    messages, taxLogger, economy);
             redstoneTaxCollector.enable();
 
             livestockTaxCollector = new LivestockTaxCollector(this, logger,
-                    messages, database, taxLogger, regionManager, economy);
+                    messages, database, taxLogger, economy);
             livestockTaxCollector.enable();
 
             hopperTaxCollector = new HopperTaxCollector(this, logger, messages,
-                    taxLogger, economy, regionManager);
+                    taxLogger, economy);
             hopperTaxCollector.enable();
 
             if (database != null && worldTable != null
                     && playerTable != null) {
                 landRentalManager = new LandRentalManager(this, logger,
-                        messages, economy, permission, database, regionManager,
-                        playerTable, worldTable);
+                        messages, economy, permission, database, playerTable,
+                        worldTable);
                 landRentalManager.enable();
             }
 
         } catch (Throwable th) {
-            logger.warning(th, "Failed to initialize %s", getName());
+            logger.warning(th, "Failed to initialize");
             getServer().getPluginManager().disablePlugin(this);
         }
     }
@@ -208,43 +204,6 @@ public class Takenomics extends JavaPlugin {
         });
     }
 
-    Economy getEconomyProvider() throws Exception {
-        RegisteredServiceProvider<Economy> economyProvider = getServer()
-                .getServicesManager()
-                .getRegistration(net.milkbowl.vault.economy.Economy.class);
-
-        if (economyProvider == null) {
-            String msg = String.format("No Vault found!  Disabled %s.",
-                    getName());
-            throw new Exception(msg);
-        }
-
-        return economyProvider.getProvider();
-    }
-
-    Permission getPermissionProvider() throws Exception {
-        RegisteredServiceProvider<Permission> permissionProvider = getServer()
-                .getServicesManager().getRegistration(
-                        net.milkbowl.vault.permission.Permission.class);
-
-        if (permissionProvider == null) {
-            String msg = String.format("No Vault found!  Disabled %s.",
-                    getName());
-            throw new Exception(msg);
-        }
-
-        return permissionProvider.getProvider();
-    }
-
-    static WorldGuardPlugin getWorldGuard() throws Exception {
-        Plugin result = Bukkit.getPluginManager().getPlugin("WorldGuard");
-        if (result == null || !(result instanceof WorldGuardPlugin)) {
-            throw new Exception("No WorldGuard found.");
-        }
-
-        return (WorldGuardPlugin) result;
-    }
-
     @Override
     public void onDisable() {
         if (landRentalManager != null) {
@@ -271,8 +230,6 @@ public class Takenomics extends JavaPlugin {
             taxOnSavingsCollector.disable();
             taxOnSavingsCollector = null;
         }
-
-        economy = null;
 
         if (taxLogger != null) {
             taxLogger.disable();

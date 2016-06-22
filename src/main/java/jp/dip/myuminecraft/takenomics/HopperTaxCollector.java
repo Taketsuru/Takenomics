@@ -73,20 +73,17 @@ public class HopperTaxCollector extends PeriodicTaxCollector
     TaxLogger            taxLogger;
     TaxTable             taxTable;
     Economy              economy;
-    RegionManager        regionManager;
     Map<UUID, PayerInfo> payersTable;
     Set<String>          taxFreeRegions;
     int                  investigationIndex;
     List<Chunk>          investigationList;
 
     public HopperTaxCollector(JavaPlugin plugin, Logger logger,
-            Messages messages, TaxLogger taxLogger, Economy economy,
-            RegionManager regionManager) {
+            Messages messages, TaxLogger taxLogger, Economy economy) {
         super(plugin, logger);
         this.messages = messages;
         this.taxLogger = taxLogger;
         this.economy = economy;
-        this.regionManager = regionManager;
         taxTable = new TaxTable();
         payersTable = new HashMap<UUID, PayerInfo>();
         taxFreeRegions = new HashSet<String>();
@@ -118,8 +115,7 @@ public class HopperTaxCollector extends PeriodicTaxCollector
         }
 
         Location location = block.getLocation();
-        ProtectedRegion region = regionManager
-                .getHighestPriorityRegion(location);
+        ProtectedRegion region = RegionUtil.getHighestPriorityRegion(location);
         if (region == null) {
             messages.send(event.getPlayer(), "hopperPlacementNotAllowed");
             event.setCancelled(true);
@@ -130,7 +126,7 @@ public class HopperTaxCollector extends PeriodicTaxCollector
             return;
         }
 
-        List<UUID> owners = regionManager.getOwners(region);
+        List<UUID> owners = RegionUtil.getOwners(region);
         if (owners.isEmpty()) {
             messages.send(event.getPlayer(), "hopperPlacementNotAllowed");
             event.setCancelled(true);
@@ -213,7 +209,7 @@ public class HopperTaxCollector extends PeriodicTaxCollector
 
                 Location location = state.getLocation();
 
-                ProtectedRegion region = regionManager
+                ProtectedRegion region = RegionUtil
                         .getHighestPriorityRegion(location);
                 if (region == null) {
                     continue;
@@ -223,7 +219,7 @@ public class HopperTaxCollector extends PeriodicTaxCollector
                     continue;
                 }
 
-                List<UUID> owners = regionManager.getOwners(region);
+                List<UUID> owners = RegionUtil.getOwners(region);
                 if (owners.isEmpty()) {
                     continue;
                 }

@@ -4,38 +4,21 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import jp.dip.myuminecraft.takecore.Logger;
-import jp.dip.myuminecraft.takenomics.models.PlayerTable;
-
 import org.bukkit.Location;
-import org.bukkit.plugin.java.JavaPlugin;
 
 import com.sk89q.worldguard.bukkit.WorldGuardPlugin;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 
-public class RegionManager {
+public class RegionUtil {
 
-    JavaPlugin       plugin;
-    Logger           logger;
-    PlayerTable      playerTable;
-    WorldGuardPlugin worldGuard;
-
-    public RegionManager(JavaPlugin plugin, Logger logger,
-            PlayerTable playerTable, WorldGuardPlugin worldGuard) {
-        this.plugin = plugin;
-        this.logger = logger;
-        this.playerTable = playerTable;
-        this.worldGuard = worldGuard;
-    }
-
-    public List<UUID> getOwners(ProtectedRegion region) {
+    public static List<UUID> getOwners(ProtectedRegion region) {
         return new ArrayList<UUID>(region.getOwners().getUniqueIds());
     }
 
-    public ProtectedRegion getHighestPriorityRegion(Location loc) {
+    public static ProtectedRegion getHighestPriorityRegion(Location loc) {
         ProtectedRegion highest = null;
         int currentPriority = Integer.MIN_VALUE;
-        for (ProtectedRegion region : worldGuard
+        for (ProtectedRegion region : WorldGuardPlugin.inst()
                 .getRegionManager(loc.getWorld()).getApplicableRegions(loc)) {
             int regionPriority = region.getPriority();
             if (currentPriority < regionPriority) {

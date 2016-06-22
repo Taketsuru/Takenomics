@@ -77,7 +77,6 @@ public class LivestockTaxCollector extends PeriodicTaxCollector
     Messages             messages;
     Database             database;
     TaxLogger            taxLogger;
-    RegionManager        regionManager;
     Economy              economy;
     Set<String>          taxExempt         = new HashSet<String>();
     TaxTable             untamedTaxTable   = new TaxTable();
@@ -89,12 +88,11 @@ public class LivestockTaxCollector extends PeriodicTaxCollector
 
     public LivestockTaxCollector(JavaPlugin plugin, Logger logger,
             Messages messages, Database database, TaxLogger taxLogger,
-            RegionManager regionManager, Economy economy) {
+            Economy economy) {
         super(plugin, logger);
         this.messages = messages;
         this.database = database;
         this.taxLogger = taxLogger;
-        this.regionManager = regionManager;
         this.economy = economy;
     }
 
@@ -206,7 +204,7 @@ public class LivestockTaxCollector extends PeriodicTaxCollector
     }
 
     OfflinePlayer findLivestockTaxPayer(Server server, Entity entity) {
-        ProtectedRegion region = regionManager
+        ProtectedRegion region = RegionUtil
                 .getHighestPriorityRegion(entity.getLocation());
         if (region == null) {
             return null;
@@ -216,7 +214,7 @@ public class LivestockTaxCollector extends PeriodicTaxCollector
             return null;
         }
 
-        List<UUID> owners = regionManager.getOwners(region);
+        List<UUID> owners = RegionUtil.getOwners(region);
         if (owners.isEmpty()) {
             return null;
         }
@@ -377,10 +375,9 @@ public class LivestockTaxCollector extends PeriodicTaxCollector
 
     boolean isInPlayersLand(Player player, Location location) {
         UUID playerId = player.getUniqueId();
-        ProtectedRegion region = regionManager
-                .getHighestPriorityRegion(location);
+        ProtectedRegion region = RegionUtil.getHighestPriorityRegion(location);
         return region != null
-                && regionManager.getOwners(region).contains(playerId);
+                && RegionUtil.getOwners(region).contains(playerId);
     }
 
     boolean hasArrears(Player player) {
@@ -413,7 +410,7 @@ public class LivestockTaxCollector extends PeriodicTaxCollector
             return;
         }
 
-        ProtectedRegion region = regionManager
+        ProtectedRegion region = RegionUtil
                 .getHighestPriorityRegion(event.getLocation());
         if (region != null && !taxExempt.contains(region.getId())) {
             logger.info("%s spawn cancelled in %s @ %s:%d,%d,%d",

@@ -36,8 +36,8 @@ public class TaxOnSavingsCollector extends PeriodicTaxCollector implements Liste
     Economy   economy;
     TaxTable  table = new TaxTable();
 
-    public TaxOnSavingsCollector(final JavaPlugin plugin, Logger logger, Messages messages,
-            TaxLogger taxLogger, final Economy economy) {
+    public TaxOnSavingsCollector(JavaPlugin plugin, Logger logger, Messages messages,
+            TaxLogger taxLogger, Economy economy) {
         super(plugin, logger);
 
         this.messages = messages;

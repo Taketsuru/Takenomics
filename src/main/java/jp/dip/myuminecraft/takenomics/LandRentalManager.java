@@ -48,6 +48,7 @@ import com.sk89q.worldedit.world.storage.ChunkStore;
 import com.sk89q.worldguard.bukkit.BukkitPlayer;
 import com.sk89q.worldguard.bukkit.WorldGuardPlugin;
 import com.sk89q.worldguard.domains.DefaultDomain;
+import com.sk89q.worldguard.protection.managers.RegionManager;
 import com.sk89q.worldguard.protection.regions.ProtectedCuboidRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedPolygonalRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
@@ -207,7 +208,6 @@ public class LandRentalManager implements Listener, SignTableListener {
     Permission                    permission;
     SignTable                     signTable;
     Database                      database;
-    RegionManager                 regionManager;
     String                        rentalTableName;
     String                        contractTableName;
     PlayerTable                   playerTable;
@@ -219,15 +219,14 @@ public class LandRentalManager implements Listener, SignTableListener {
 
     public LandRentalManager(JavaPlugin plugin, Logger logger,
             Messages messages, Economy economy, Permission permission,
-            Database database, RegionManager regionManager,
-            PlayerTable playerTable, WorldTable worldTable) {
+            Database database, PlayerTable playerTable,
+            WorldTable worldTable) {
         this.plugin = plugin;
         this.logger = logger;
         this.messages = messages;
         this.economy = economy;
         this.permission = permission;
         this.database = database;
-        this.regionManager = regionManager;
         this.playerTable = playerTable;
         this.worldTable = worldTable;
     }
@@ -504,7 +503,7 @@ public class LandRentalManager implements Listener, SignTableListener {
         WorldGuardPlugin worldGuard = WorldGuardPlugin.inst();
         Player player = event.getPlayer();
         BukkitPlayer wgPlayer = new BukkitPlayer(worldGuard, player);
-        com.sk89q.worldguard.protection.managers.RegionManager wgRegionManager = worldGuard
+        RegionManager wgRegionManager = worldGuard
                 .getRegionManager(signBlock.getWorld());
         ProtectedRegion region = wgRegionManager.getRegion(rental.regionName);
 
@@ -551,16 +550,16 @@ public class LandRentalManager implements Listener, SignTableListener {
     ProtectedRegion findRegion(Player player, Location attachedLocation) {
         boolean perm = player.hasPermission(permNodeToCreateSign);
         WorldGuardPlugin worldGuard = WorldGuardPlugin.inst();
-        com.sk89q.worldguard.protection.managers.RegionManager wgRegionManager = worldGuard
+        RegionManager wgRegionManager = worldGuard
                 .getRegionManager(attachedLocation.getWorld());
         BukkitPlayer wgPlayer = new BukkitPlayer(worldGuard, player);
 
         ProtectedRegion foundRegion = null;
         int currentPriority = Integer.MIN_VALUE;
         Location rgLocation = attachedLocation.clone();
-        for (int modx = -1; modx <= 1; ++modx) {
+        for (int mody = -1; mody <= 1; ++mody) {
             for (int modz = -1; modz <= 1; ++modz) {
-                for (int mody = -1; mody <= 1; ++mody) {
+                for (int modx = -1; modx <= 1; ++modx) {
                     rgLocation.setX(attachedLocation.getBlockX() + modx);
                     rgLocation.setY(attachedLocation.getBlockY() + mody);
                     rgLocation.setZ(attachedLocation.getBlockZ() + modz);
@@ -570,7 +569,7 @@ public class LandRentalManager implements Listener, SignTableListener {
                         if (region.getId().equals("__global__")) {
                             continue;
                         }
-                        
+
                         int regionPriority = region.getPriority();
                         if (regionPriority <= currentPriority) {
                             continue;
@@ -748,8 +747,7 @@ public class LandRentalManager implements Listener, SignTableListener {
 
         World world = Bukkit.getWorld(rental.worldName);
         WorldGuardPlugin worldGuard = WorldGuardPlugin.inst();
-        com.sk89q.worldguard.protection.managers.RegionManager wgRegionManager = worldGuard
-                .getRegionManager(world);
+        RegionManager wgRegionManager = worldGuard.getRegionManager(world);
         ProtectedRegion region = wgRegionManager.getRegion(rental.regionName);
         DefaultDomain members = region.getMembers();
         members.clear();
@@ -825,8 +823,7 @@ public class LandRentalManager implements Listener, SignTableListener {
         World world = Bukkit.getServer().getWorld(contract.worldName);
 
         WorldGuardPlugin worldGuard = WorldGuardPlugin.inst();
-        com.sk89q.worldguard.protection.managers.RegionManager wgRegionManager = worldGuard
-                .getRegionManager(world);
+        RegionManager wgRegionManager = worldGuard.getRegionManager(world);
         ProtectedRegion protectedRegion = wgRegionManager
                 .getRegion(contract.regionName);
 
@@ -1182,8 +1179,8 @@ public class LandRentalManager implements Listener, SignTableListener {
 
     void pay(String worldName, String regionName, double fee) {
         World world = Bukkit.getWorld(worldName);
-        com.sk89q.worldguard.protection.managers.RegionManager wgRegionManager = WorldGuardPlugin
-                .inst().getRegionManager(world);
+        RegionManager wgRegionManager = WorldGuardPlugin.inst()
+                .getRegionManager(world);
         ProtectedRegion region = wgRegionManager.getRegion(regionName);
         DefaultDomain owners = region.getOwners();
 
