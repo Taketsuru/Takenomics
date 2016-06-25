@@ -11,6 +11,7 @@ import java.util.ArrayDeque;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
@@ -28,6 +29,7 @@ import org.bukkit.block.BlockState;
 import org.bukkit.block.Sign;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -268,6 +270,31 @@ public class LandRentalManager implements Listener, SignTableListener {
         loadedSigns.clear();
     }
 
+    
+    public UUID findTaxPayer(String worldName, ProtectedRegion region) {
+        Rental rental = findRental(worldName, region.getId());
+        if (rental != null && rental.currentContract != null) {
+            return rental.currentContract.tenant;
+        }
+
+        DefaultDomain domain = region.getOwners();
+        if (domain == null || domain.size() == 0) {
+            return null;
+        }
+
+        double maxBalance = Double.MIN_VALUE;
+        UUID payer = null;
+        for (UUID uuid : domain.getUniqueIds()) {
+            double balance = economy.getBalance(Bukkit.getOfflinePlayer(uuid));
+            if (maxBalance < balance) {
+                maxBalance = balance;
+                payer = uuid;
+            }
+        }
+
+        return payer;
+    }
+
     @Override
     public boolean mayCreate(Player player, Location location,
             Location attachedLocation, String[] lines) {
@@ -485,7 +512,7 @@ public class LandRentalManager implements Listener, SignTableListener {
         }
     }
 
-    @EventHandler(ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onPlayerInteract(PlayerInteractEvent event) {
         Block signBlock = event.getClickedBlock();
         if (!(signBlock.getState() instanceof Sign)) {
@@ -771,6 +798,46 @@ public class LandRentalManager implements Listener, SignTableListener {
 
         database.submitAsync(new DatabaseTask() {
             @Override
+            public void run(Connection connection) throws Throwable {
+                try (PreparedStatement stmt = connection
+                        .prepareStatement(String.format(
+                                "SELECT contract.expiration "
+                                        + "FROM %s AS contract"
+                                        + " JOIN %s AS world ON contract.world = world.id"
+                                        + " JOIN %s AS player ON contract.tenant = player.id "
+                                        + "WHERE contract.state = 'end' AND world.name = ?"
+                                        + " AND contract.region = ? AND player.uuid = ? "
+                                        + "ORDER BY contract.expiration DESC LIMIT 1",
+                                contractTableName, worldTable.getTableName(),
+                                playerTable.getTableName()))) {
+                    stmt.setString(1, rental.worldName);
+                    stmt.setString(2, rental.regionName);
+                    stmt.setBytes(3, uuid);
+                    ResultSet rs = stmt.executeQuery();
+                    if (rs.next()) {
+                        String expiration = rs.getString(1);
+                        new BukkitRunnable() {
+                            @Override
+                            public void run() {
+                                try {
+                                    restoreBlocks(rental.worldName,
+                                            rental.regionName, expiration);
+                                } catch (Throwable e) {
+                                    logger.warning(e,
+                                            "Failed to restore the last block state: "
+                                                    + "world %s region %s",
+                                            rental.worldName,
+                                            rental.regionName);
+                                }
+                            }
+                        }.runTask(plugin);
+                    }
+                }
+            }
+        });
+
+        database.submitAsync(new DatabaseTask() {
+            @Override
             public void run(Connection connection) throws SQLException {
                 connection.setAutoCommit(false);
 
@@ -820,20 +887,27 @@ public class LandRentalManager implements Listener, SignTableListener {
     }
 
     void terminateContract(TerminatedContract contract) throws Exception {
-        World world = Bukkit.getServer().getWorld(contract.worldName);
+        WorldGuardPlugin.inst()
+                .getRegionManager(Bukkit.getWorld(contract.worldName))
+                .getRegion(contract.regionName).getMembers().clear();
+
+        restoreBlocks(contract.worldName, contract.regionName,
+                contract.creationDate);
+    }
+
+    void restoreBlocks(String worldName, String regionName, String date)
+            throws Exception {
+        World world = Bukkit.getServer().getWorld(worldName);
 
         WorldGuardPlugin worldGuard = WorldGuardPlugin.inst();
         RegionManager wgRegionManager = worldGuard.getRegionManager(world);
         ProtectedRegion protectedRegion = wgRegionManager
-                .getRegion(contract.regionName);
+                .getRegion(regionName);
 
         BukkitWorld weWorld = new BukkitWorld(world);
         EditSession editSession = WorldEdit.getInstance()
                 .getEditSessionFactory()
                 .getEditSession((com.sk89q.worldedit.world.World) weWorld, -1);
-
-        DefaultDomain members = protectedRegion.getMembers();
-        members.clear();
 
         Region region;
         if (protectedRegion instanceof ProtectedCuboidRegion) {
@@ -856,8 +930,8 @@ public class LandRentalManager implements Listener, SignTableListener {
         }
 
         LocalConfiguration config = WorldEdit.getInstance().getConfiguration();
-        Snapshot snapshot = config.snapshotRepo.getSnapshot(String
-                .format("%s/%s", contract.worldName, contract.creationDate));
+        Snapshot snapshot = config.snapshotRepo
+                .getSnapshot(String.format("%s/%s", worldName, date));
         ChunkStore chunkStore = snapshot.getChunkStore();
 
         try {

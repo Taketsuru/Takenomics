@@ -4,17 +4,16 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 import net.milkbowl.vault.economy.Economy;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
-import org.bukkit.Server;
 import org.bukkit.World;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Ageable;
@@ -78,6 +77,7 @@ public class LivestockTaxCollector extends PeriodicTaxCollector
     Database             database;
     TaxLogger            taxLogger;
     Economy              economy;
+    LandRentalManager    landRentalManager;
     Set<String>          taxExempt         = new HashSet<String>();
     TaxTable             untamedTaxTable   = new TaxTable();
     TaxTable             tamedTaxTable     = new TaxTable();
@@ -88,12 +88,13 @@ public class LivestockTaxCollector extends PeriodicTaxCollector
 
     public LivestockTaxCollector(JavaPlugin plugin, Logger logger,
             Messages messages, Database database, TaxLogger taxLogger,
-            Economy economy) {
+            Economy economy, LandRentalManager landRentalManager) {
         super(plugin, logger);
         this.messages = messages;
         this.database = database;
         this.taxLogger = taxLogger;
         this.economy = economy;
+        this.landRentalManager = landRentalManager;
     }
 
     public void enable() {
@@ -112,7 +113,7 @@ public class LivestockTaxCollector extends PeriodicTaxCollector
             return;
         }
 
-        plugin.getServer().getPluginManager().registerEvents(this, plugin);
+        Bukkit.getPluginManager().registerEvents(this, plugin);
     }
 
     protected boolean loadConfig(Logger logger, FileConfiguration config,
@@ -139,11 +140,8 @@ public class LivestockTaxCollector extends PeriodicTaxCollector
 
     @Override
     protected boolean prepareCollection() {
-        Server server = plugin.getServer();
-
         if (worldIter == null) {
-            worldIter = new ArrayList<World>(plugin.getServer().getWorlds())
-                    .iterator();
+            worldIter = new ArrayList<World>(Bukkit.getWorlds()).iterator();
             world = null;
         }
 
@@ -173,25 +171,31 @@ public class LivestockTaxCollector extends PeriodicTaxCollector
                 continue;
             }
 
-            OfflinePlayer payer = null;
+            UUID payer = null;
             boolean tamed = entity instanceof Tameable
                     && ((Tameable) entity).isTamed();
             AnimalTamer owner = tamed ? ((Tameable) entity).getOwner() : null;
             if (owner != null && owner instanceof OfflinePlayer) {
-                payer = server.getOfflinePlayer(owner.getUniqueId());
+                payer = owner.getUniqueId();
             } else {
-                payer = findLivestockTaxPayer(server, entity);
+                ProtectedRegion region = RegionUtil
+                        .getHighestPriorityRegion(entity.getLocation());
+                if (region == null || taxExempt.contains(region.getId())) {
+                    continue;
+                }
+                payer = landRentalManager.findTaxPayer(
+                        entity.getLocation().getWorld().getName(), region);
             }
 
             if (payer == null) {
                 continue;
             }
-            UUID payerId = payer.getUniqueId();
-            PayerInfo info = accountingRecords.get(payerId);
+
+            PayerInfo info = accountingRecords.get(payer);
             if (info == null) {
                 info = new PayerInfo();
-                accountingRecords.put(payerId, info);
-                addPayer(payer);
+                accountingRecords.put(payer, info);
+                addPayer(Bukkit.getOfflinePlayer(payer));
             }
             if (tamed) {
                 ++info.tamedCount;
@@ -201,27 +205,6 @@ public class LivestockTaxCollector extends PeriodicTaxCollector
         }
 
         return false;
-    }
-
-    OfflinePlayer findLivestockTaxPayer(Server server, Entity entity) {
-        ProtectedRegion region = RegionUtil
-                .getHighestPriorityRegion(entity.getLocation());
-        if (region == null) {
-            return null;
-        }
-
-        if (taxExempt.contains(region.getId())) {
-            return null;
-        }
-
-        List<UUID> owners = RegionUtil.getOwners(region);
-        if (owners.isEmpty()) {
-            return null;
-        }
-
-        UUID primaryOwner = owners.get(0);
-
-        return server.getOfflinePlayer(primaryOwner);
     }
 
     @Override
@@ -376,8 +359,8 @@ public class LivestockTaxCollector extends PeriodicTaxCollector
     boolean isInPlayersLand(Player player, Location location) {
         UUID playerId = player.getUniqueId();
         ProtectedRegion region = RegionUtil.getHighestPriorityRegion(location);
-        return region != null
-                && RegionUtil.getOwners(region).contains(playerId);
+        return region != null && landRentalManager
+                .findTaxPayer(location.getWorld().getName(), region) != null;
     }
 
     boolean hasArrears(Player player) {

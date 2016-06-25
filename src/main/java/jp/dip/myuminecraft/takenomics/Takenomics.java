@@ -129,24 +129,6 @@ public class Takenomics extends JavaPlugin {
                 essentialsShopMonitor = null;
             }
 
-            taxLogger = new TaxLogger(this);
-
-            taxOnSavingsCollector = new TaxOnSavingsCollector(this, logger,
-                    messages, taxLogger, economy);
-            taxOnSavingsCollector.enable();
-
-            redstoneTaxCollector = new RedstoneTaxCollector(this, logger,
-                    messages, taxLogger, economy);
-            redstoneTaxCollector.enable();
-
-            livestockTaxCollector = new LivestockTaxCollector(this, logger,
-                    messages, database, taxLogger, economy);
-            livestockTaxCollector.enable();
-
-            hopperTaxCollector = new HopperTaxCollector(this, logger, messages,
-                    taxLogger, economy);
-            hopperTaxCollector.enable();
-
             if (database != null && worldTable != null
                     && playerTable != null) {
                 landRentalManager = new LandRentalManager(this, logger,
@@ -154,6 +136,24 @@ public class Takenomics extends JavaPlugin {
                         worldTable);
                 landRentalManager.enable();
             }
+
+            taxLogger = new TaxLogger(this);
+
+            taxOnSavingsCollector = new TaxOnSavingsCollector(this, logger,
+                    messages, taxLogger, economy);
+            taxOnSavingsCollector.enable();
+
+            redstoneTaxCollector = new RedstoneTaxCollector(this, logger,
+                    messages, taxLogger, economy, landRentalManager);
+            redstoneTaxCollector.enable();
+
+            livestockTaxCollector = new LivestockTaxCollector(this, logger,
+                    messages, database, taxLogger, economy, landRentalManager);
+            livestockTaxCollector.enable();
+
+            hopperTaxCollector = new HopperTaxCollector(this, logger, messages,
+                    taxLogger, economy, landRentalManager);
+            hopperTaxCollector.enable();
 
         } catch (Throwable th) {
             logger.warning(th, "Failed to initialize");

@@ -1,33 +1,42 @@
 package jp.dip.myuminecraft.takenomics;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
-
 import org.bukkit.Location;
 
 import com.sk89q.worldguard.bukkit.WorldGuardPlugin;
+import com.sk89q.worldguard.protection.ApplicableRegionSet;
+import com.sk89q.worldguard.protection.managers.RegionManager;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 
 public class RegionUtil {
 
-    public static List<UUID> getOwners(ProtectedRegion region) {
-        return new ArrayList<UUID>(region.getOwners().getUniqueIds());
-    }
-
     public static ProtectedRegion getHighestPriorityRegion(Location loc) {
-        ProtectedRegion highest = null;
-        int currentPriority = Integer.MIN_VALUE;
-        for (ProtectedRegion region : WorldGuardPlugin.inst()
-                .getRegionManager(loc.getWorld()).getApplicableRegions(loc)) {
-            int regionPriority = region.getPriority();
-            if (currentPriority < regionPriority) {
-                highest = region;
-                currentPriority = regionPriority;
-            }
+        WorldGuardPlugin worldGuard = WorldGuardPlugin.inst();
+        RegionManager wgRegionManager = worldGuard
+                .getRegionManager(loc.getWorld());
+        ApplicableRegionSet regions = wgRegionManager
+                .getApplicableRegions(loc);
+
+        if (regions == null) {
+            return null;
         }
 
-        return highest;
+        ProtectedRegion foundRegion = null;
+        int currentPriority = Integer.MIN_VALUE;
+        for (ProtectedRegion region : regions) {
+            if (region.getId().equals("__global__")) {
+                continue;
+            }
+
+            int regionPriority = region.getPriority();
+            if (regionPriority <= currentPriority) {
+                continue;
+            }
+
+            foundRegion = region;
+            currentPriority = regionPriority;
+        }
+
+        return foundRegion;
     }
 
 }

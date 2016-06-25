@@ -14,8 +14,7 @@ import jp.dip.myuminecraft.takecore.Logger;
 public abstract class PeriodicTaxCollector extends TaxCollector {
 
     enum State {
-        preparing,
-        collecting,
+        preparing, collecting,
     }
 
     BukkitRunnable      runnable;
@@ -28,25 +27,25 @@ public abstract class PeriodicTaxCollector extends TaxCollector {
         super(plugin, logger);
     }
 
-    protected void loadConfig(Logger logger, FileConfiguration config, String configPrefix, String taxName) {
+    protected void loadConfig(Logger logger, FileConfiguration config,
+            String configPrefix, String taxName) {
         super.loadConfig(logger, config, configPrefix, taxName);
 
         if (enable) {
             scheduleNextInterval();
-        }       
+        }
     }
-    
-    protected boolean
-    loadConfig(Logger logger, FileConfiguration config,
+
+    protected boolean loadConfig(Logger logger, FileConfiguration config,
             String configPrefix, boolean error) {
         boolean result = super.loadConfig(logger, config, configPrefix, error);
 
         String configInterval = configPrefix + ".interval";
-        if (! config.contains(configInterval)) {
+        if (!config.contains(configInterval)) {
             logger.warning("'%s' is not configured.", configInterval);
             result = true;
-        } else if (! config.isInt(configInterval)
-                && ! config.isLong(configInterval)) {
+        } else if (!config.isInt(configInterval)
+                && !config.isLong(configInterval)) {
             logger.warning("'%s' is not an integer.", configInterval);
             result = true;
         } else {
@@ -61,7 +60,7 @@ public abstract class PeriodicTaxCollector extends TaxCollector {
                 this.interval = interval;
             }
         }
-        
+
         return result;
     }
 
@@ -69,25 +68,25 @@ public abstract class PeriodicTaxCollector extends TaxCollector {
             String configName, Set<String> taxExempt) {
         taxExempt.clear();
 
-        if (! config.contains(configName)) {
+        if (!config.contains(configName)) {
             return false;
         }
-        
-        if (! config.isList(configName)) {
+
+        if (!config.isList(configName)) {
             logger.warning("%s is not a valid region name list.", configName);
             return true;
         }
-        
+
         for (String regionId : config.getStringList(configName)) {
             if (taxExempt.contains(regionId)) {
                 logger.warning("region %s appears more than once.", regionId);
             }
             taxExempt.add(regionId);
         }
-        
+
         return false;
     }
-    
+
     public void disable() {
         if (runnable != null) {
             runnable.cancel();
@@ -98,7 +97,7 @@ public abstract class PeriodicTaxCollector extends TaxCollector {
     void scheduleNextInterval() {
         state = State.preparing;
         runnable = newCollectorTask();
-        runnable.runTaskLater(plugin, interval * Constants.ticksPerSecond);        
+        runnable.runTaskLater(plugin, interval * Constants.ticksPerSecond);
     }
 
     BukkitRunnable newCollectorTask() {
@@ -116,7 +115,7 @@ public abstract class PeriodicTaxCollector extends TaxCollector {
     void collectFromPayers() {
         switch (state) {
         case preparing:
-            if (! prepareCollection()) {
+            if (!prepareCollection()) {
                 runnable = newCollectorTask();
                 runnable.runTask(plugin);
                 return;
@@ -125,18 +124,18 @@ public abstract class PeriodicTaxCollector extends TaxCollector {
             state = State.collecting;
             nextPayer = 0;
             // fall through
-            
-        case collecting:  
+
+        case collecting:
             long startTime = System.nanoTime();
             long maxCollectionTime = 10 * 1000 * 1000; // 10ms
             for (; nextPayer < payers.size(); ++nextPayer) {
-    
+
                 if (maxCollectionTime <= System.nanoTime() - startTime) {
                     runnable = newCollectorTask();
                     runnable.runTask(plugin);
                     return;
                 }
-    
+
                 OfflinePlayer payer = payers.get(nextPayer);
                 if (collect(payer)) {
                     int size = payers.size();
@@ -148,7 +147,7 @@ public abstract class PeriodicTaxCollector extends TaxCollector {
                 }
             }
             break;
-            
+
         default:
             break;
         }
@@ -157,9 +156,9 @@ public abstract class PeriodicTaxCollector extends TaxCollector {
     }
 
     protected abstract boolean collect(OfflinePlayer payer);
-    
+
     public void addPayer(OfflinePlayer payer) {
-        if (! payers.contains(payer)) {
+        if (!payers.contains(payer)) {
             payers.add(payer);
         }
     }

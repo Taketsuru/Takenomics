@@ -1,6 +1,5 @@
 package jp.dip.myuminecraft.takenomics;
 
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -9,9 +8,9 @@ import java.util.UUID;
 
 import net.milkbowl.vault.economy.Economy;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.OfflinePlayer;
-import org.bukkit.Server;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -26,9 +25,10 @@ import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import jp.dip.myuminecraft.takecore.Logger;
 import jp.dip.myuminecraft.takecore.Messages;
 
-public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listener {
+public class RedstoneTaxCollector extends PeriodicTaxCollector
+        implements Listener {
 
-    class RedstoneTaxRecord extends TaxRecord {       
+    class RedstoneTaxRecord extends TaxRecord {
         long   switching;
         double rate;
         double arrears;
@@ -36,15 +36,16 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
 
         RedstoneTaxRecord(long timestamp, OfflinePlayer player, long switching,
                 double rate, double arrears, double paid) {
-             super(timestamp, player);
-             this.switching = switching;
-             this.rate = rate;
-             this.arrears = arrears;
-             this.paid = paid;
+            super(timestamp, player);
+            this.switching = switching;
+            this.rate = rate;
+            this.arrears = arrears;
+            this.paid = paid;
         }
-        
+
         protected String subclassToString() {
-            return String.format("redstone %d %f %f %f", switching, rate, arrears, paid);
+            return String.format("redstone %d %f %f %f", switching, rate,
+                    arrears, paid);
         }
     }
 
@@ -58,58 +59,65 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
         }
     }
 
-    Messages                      messages;
-    TaxLogger                     taxLogger;
-    TaxTable                      taxTable       = new TaxTable();
-    Economy                       economy;
-    Map<OfflinePlayer, PayerInfo> payersTable    = new HashMap<OfflinePlayer, PayerInfo>();
-    Set<String>                   taxFreeRegions = new HashSet<String>();
+    Messages             messages;
+    TaxLogger            taxLogger;
+    Economy              economy;
+    LandRentalManager    landRentalManager;
+    TaxTable             taxTable    = new TaxTable();
+    Map<UUID, PayerInfo> payersTable = new HashMap<UUID, PayerInfo>();
+    Set<String>          taxExempt   = new HashSet<String>();
 
-    public RedstoneTaxCollector(JavaPlugin plugin, Logger logger, Messages messages,
-            TaxLogger taxLogger, Economy economy) {
+    public RedstoneTaxCollector(JavaPlugin plugin, Logger logger,
+            Messages messages, TaxLogger taxLogger, Economy economy,
+            LandRentalManager landRentalManager) {
         super(plugin, logger);
         this.messages = messages;
         this.taxLogger = taxLogger;
         this.economy = economy;
+        this.landRentalManager = landRentalManager;
     }
-    
+
     public void enable() {
-        super.loadConfig(logger, plugin.getConfig(), "redstoneTax", "redstone tax");
+        super.loadConfig(logger, plugin.getConfig(), "redstoneTax",
+                "redstone tax");
 
         if (enable) {
-            plugin.getServer().getPluginManager().registerEvents(this, plugin);
+            Bukkit.getPluginManager().registerEvents(this, plugin);
         } else {
             taxTable.clear();
-            taxFreeRegions.clear();
+            taxExempt.clear();
         }
     }
 
-    protected boolean loadConfig(Logger logger, FileConfiguration config, String configPrefix, boolean error) {
-        boolean result = super.loadConfig(logger,  config, configPrefix, error);
-        
-        if (! taxTable.loadConfig(logger, config, configPrefix + ".table")) {
+    protected boolean loadConfig(Logger logger, FileConfiguration config,
+            String configPrefix, boolean error) {
+        boolean result = super.loadConfig(logger, config, configPrefix, error);
+
+        if (!taxTable.loadConfig(logger, config, configPrefix + ".table")) {
             result = true;
         }
 
         String configTaxFree = configPrefix + ".taxExempt";
-        taxFreeRegions.clear();
+        taxExempt.clear();
         if (config.contains(configTaxFree)) {
-            if (! config.isList(configTaxFree)) {
-                logger.warning("%s is not a valid region name list.", configTaxFree);
+            if (!config.isList(configTaxFree)) {
+                logger.warning("%s is not a valid region name list.",
+                        configTaxFree);
                 result = true;
             } else {
                 for (String regionId : config.getStringList(configTaxFree)) {
-                    if (taxFreeRegions.contains(regionId)) {
-                        logger.warning("region %s appears more than once.", regionId);
+                    if (taxExempt.contains(regionId)) {
+                        logger.warning("region %s appears more than once.",
+                                regionId);
                     }
-                    taxFreeRegions.add(regionId);
+                    taxExempt.add(regionId);
                 }
             }
         }
-        
+
         return result;
     }
-    
+
     @EventHandler(priority = EventPriority.MONITOR)
     public void monitorRedstone(BlockRedstoneEvent event) {
         if ((0 < event.getOldCurrent()) == (0 < event.getNewCurrent())) {
@@ -118,25 +126,25 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
 
         Location loc = event.getBlock().getLocation();
         ProtectedRegion region = RegionUtil.getHighestPriorityRegion(loc);
-        if (region == null || taxFreeRegions.contains(region.getId())) {
+        if (region == null || taxExempt.contains(region.getId())) {
             return;
         }
 
-        Collection<UUID> owners = RegionUtil.getOwners(region);       
-        Server server = plugin.getServer();
-        for (UUID ownerUUID : owners) {
-            OfflinePlayer owner = server.getOfflinePlayer(ownerUUID);
-            PayerInfo record = payersTable.get(owner);
-            if (record == null) {
-                record = new PayerInfo();
-                payersTable.put(owner,  record);
-                addPayer(owner);
-            }
+        UUID payer = landRentalManager.findTaxPayer(loc.getWorld().getName(),
+                region);
+        if (payer == null) {
+            return;
+        }
 
-            if (record.arrears == 0.0) {
-                ++record.switching;
-                break;
-            }
+        PayerInfo record = payersTable.get(payer);
+        if (record == null) {
+            record = new PayerInfo();
+            payersTable.put(payer, record);
+            addPayer(Bukkit.getOfflinePlayer(payer));
+        }
+
+        if (record.arrears == 0.0) {
+            ++record.switching;
         }
     }
 
@@ -153,40 +161,35 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
         case REDSTONE_WIRE:
             cancelIfThereIsArrears(event);
             return;
-            
+
         default:
             return;
         }
     }
-    
+
     void cancelIfThereIsArrears(BlockPhysicsEvent event) {
         Location loc = event.getBlock().getLocation();
-
         ProtectedRegion region = RegionUtil.getHighestPriorityRegion(loc);
-        boolean paid = false;
         if (region != null) {
-            if (taxFreeRegions.contains(region.getId())) {
-                paid = true;
-            } else {  
-                Server server = plugin.getServer();
-                for (UUID uuid : RegionUtil.getOwners(region)) {
-                    OfflinePlayer player = server.getOfflinePlayer(uuid);
-                    PayerInfo record = payersTable.get(player);
-                    if (record == null || record.arrears == 0.0) {
-                        paid = true;
-                        break;
-                    }            
+            if (taxExempt.contains(region.getId())) {
+                return;
+            }
+
+            UUID payer = landRentalManager
+                    .findTaxPayer(loc.getWorld().getName(), region);
+            if (payer != null) {
+                PayerInfo record = payersTable.get(payer);
+                if (record == null || record.arrears == 0.0) {
+                    return;
                 }
             }
         }
 
-        if (! paid) {
-            event.setCancelled(true);
-        }
+        event.setCancelled(true);
     }
-    
+
     protected boolean collect(OfflinePlayer payer) {
-        PayerInfo info = payersTable.get(payer);
+        PayerInfo info = payersTable.get(payer.getUniqueId());
         long charge = info.switching;
         double rate = taxTable.getRate(charge);
 
@@ -199,7 +202,8 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
             messages.send(onlinePlayer, "redstoneTaxNoticeSwitching", charge);
             messages.send(onlinePlayer, "redstoneTaxNoticeRate", rate);
             if (0.0 < arrears) {
-                messages.send(onlinePlayer, "redstoneTaxNoticeArrears", arrears);
+                messages.send(onlinePlayer, "redstoneTaxNoticeArrears",
+                        arrears);
             }
             messages.send(onlinePlayer, "redstoneTaxNoticeTotal", tax);
         }
@@ -208,7 +212,7 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
         double paid = 0.0;
         if (balance <= 0.0) {
             paid = 0.0;
-            arrears = tax;              
+            arrears = tax;
         } else if (balance < tax) {
             paid = balance;
             arrears = tax - paid;
@@ -228,14 +232,14 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector implements Listen
             taxLogger.put(new RedstoneTaxRecord(System.currentTimeMillis(),
                     payer, charge, rate, arrears, paid));
         }
-        
+
         if (0.0 < arrears) {
             info.switching = 0;
             info.arrears = arrears;
             return false;
         }
 
-        payersTable.remove(payer);
+        payersTable.remove(payer.getUniqueId());
 
         return true;
     }

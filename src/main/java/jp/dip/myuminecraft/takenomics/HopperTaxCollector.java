@@ -15,7 +15,6 @@ import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
-import org.bukkit.Server;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
@@ -71,24 +70,22 @@ public class HopperTaxCollector extends PeriodicTaxCollector
 
     Messages             messages;
     TaxLogger            taxLogger;
-    TaxTable             taxTable;
     Economy              economy;
-    Map<UUID, PayerInfo> payersTable;
-    Set<String>          taxFreeRegions;
-    int                  investigationIndex;
-    List<Chunk>          investigationList;
+    LandRentalManager    landRentalManager;
+    TaxTable             taxTable           = new TaxTable();
+    Map<UUID, PayerInfo> payersTable        = new HashMap<UUID, PayerInfo>();
+    Set<String>          taxFreeRegions     = new HashSet<String>();
+    int                  investigationIndex = -1;
+    List<Chunk>          investigationList  = new ArrayList<Chunk>();
 
     public HopperTaxCollector(JavaPlugin plugin, Logger logger,
-            Messages messages, TaxLogger taxLogger, Economy economy) {
+            Messages messages, TaxLogger taxLogger, Economy economy,
+            LandRentalManager landRentalManager) {
         super(plugin, logger);
         this.messages = messages;
         this.taxLogger = taxLogger;
         this.economy = economy;
-        taxTable = new TaxTable();
-        payersTable = new HashMap<UUID, PayerInfo>();
-        taxFreeRegions = new HashSet<String>();
-        investigationList = new ArrayList<Chunk>();
-        investigationIndex = -1;
+        this.landRentalManager = landRentalManager;
     }
 
     public void enable() {
@@ -126,15 +123,15 @@ public class HopperTaxCollector extends PeriodicTaxCollector
             return;
         }
 
-        List<UUID> owners = RegionUtil.getOwners(region);
-        if (owners.isEmpty()) {
+        UUID payer = landRentalManager
+                .findTaxPayer(location.getWorld().getName(), region);
+        if (payer == null) {
             messages.send(event.getPlayer(), "hopperPlacementNotAllowed");
             event.setCancelled(true);
             return;
         }
 
-        UUID primaryOwner = owners.get(0);
-        PayerInfo info = payersTable.get(primaryOwner);
+        PayerInfo info = payersTable.get(payer);
         if (info != null && 0.0 < info.arrears) {
             messages.send(event.getPlayer(), "payTaxInArrearsToPlaceHopper");
             event.setCancelled(true);
@@ -202,13 +199,14 @@ public class HopperTaxCollector extends PeriodicTaxCollector
                 continue;
             }
 
+            String worldName = chunk.getWorld().getName();
+
             for (BlockState state : chunk.getTileEntities()) {
                 if (!(state instanceof Hopper)) {
                     continue;
                 }
 
                 Location location = state.getLocation();
-
                 ProtectedRegion region = RegionUtil
                         .getHighestPriorityRegion(location);
                 if (region == null) {
@@ -219,26 +217,25 @@ public class HopperTaxCollector extends PeriodicTaxCollector
                     continue;
                 }
 
-                List<UUID> owners = RegionUtil.getOwners(region);
-                if (owners.isEmpty()) {
+                UUID payer = landRentalManager.findTaxPayer(worldName,
+                        region);
+                if (payer == null) {
                     continue;
                 }
 
-                UUID primaryOwner = owners.get(0);
-                PayerInfo info = payersTable.get(primaryOwner);
+                PayerInfo info = payersTable.get(payer);
                 if (info == null) {
                     info = new PayerInfo();
-                    payersTable.put(primaryOwner, info);
+                    payersTable.put(payer, info);
                 }
 
                 info.hoppers.add(location);
             }
         }
 
-        Server server = plugin.getServer();
         for (Map.Entry<UUID, PayerInfo> entry : payersTable.entrySet()) {
             if (!entry.getValue().hoppers.isEmpty()) {
-                addPayer(server.getOfflinePlayer(entry.getKey()));
+                addPayer(Bukkit.getOfflinePlayer(entry.getKey()));
             }
         }
 
