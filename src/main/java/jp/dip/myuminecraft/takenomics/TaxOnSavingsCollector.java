@@ -32,16 +32,14 @@ public class TaxOnSavingsCollector extends PeriodicTaxCollector implements Liste
     }
 
     Messages  messages;
-    TaxLogger taxLogger;
     Economy   economy;
     TaxTable  table = new TaxTable();
 
     public TaxOnSavingsCollector(JavaPlugin plugin, Logger logger, Messages messages,
-            TaxLogger taxLogger, Economy economy) {
+            Economy economy) {
         super(plugin, logger);
 
         this.messages = messages;
-        this.taxLogger = taxLogger;
         this.economy = economy;
     }
     
@@ -97,8 +95,6 @@ public class TaxOnSavingsCollector extends PeriodicTaxCollector implements Liste
                 if (payer.isOnline()) {
                     messages.send(payer.getPlayer(), "taxCollected", (long) tax);
                 }
-
-                taxLogger.put(new Record(System.currentTimeMillis(), payer, balance, rate));
             } else {
                 logger.info(response.toString());
             }

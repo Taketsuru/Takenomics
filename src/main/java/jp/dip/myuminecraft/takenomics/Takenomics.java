@@ -35,7 +35,6 @@ public class Takenomics extends JavaPlugin {
     private AccessLog             accessLog;
     private ShopTable             shopTable;
     private TransactionTable      transactionTable;
-    private TaxLogger             taxLogger;
     private TaxOnSavingsCollector taxOnSavingsCollector;
     private RedstoneTaxCollector  redstoneTaxCollector;
     private ShopMonitor           chestShopMonitor;
@@ -55,6 +54,9 @@ public class Takenomics extends JavaPlugin {
             messages = new Messages(
                     ResourceBundle.getBundle("messages", locale), locale);
 
+            database = new Database(logger);
+            database.enable(getConfig().getConfigurationSection("database"));
+
             // Vault
             Economy economy = Bukkit.getServicesManager()
                     .getRegistration(net.milkbowl.vault.economy.Economy.class)
@@ -63,7 +65,6 @@ public class Takenomics extends JavaPlugin {
                     .getRegistration(
                             net.milkbowl.vault.permission.Permission.class)
                     .getProvider();
-            ;
 
             commandDispatcher = new CommandDispatcher(messages,
                     "takenomics.command.");
@@ -74,12 +75,6 @@ public class Takenomics extends JavaPlugin {
             signScanner = new SignScanner(this, logger, messages,
                     commandDispatcher);
             signScanner.enable();
-
-            database = new Database(this, logger);
-            if (database
-                    .enable(getConfig().getConfigurationSection("database"))) {
-                database = null;
-            }
 
             playerTable = new PlayerTable(this, logger, database, economy);
             if (playerTable.enable()) {
@@ -137,22 +132,20 @@ public class Takenomics extends JavaPlugin {
                 landRentalManager.enable();
             }
 
-            taxLogger = new TaxLogger(this);
-
             taxOnSavingsCollector = new TaxOnSavingsCollector(this, logger,
-                    messages, taxLogger, economy);
+                    messages, economy);
             taxOnSavingsCollector.enable();
 
             redstoneTaxCollector = new RedstoneTaxCollector(this, logger,
-                    messages, taxLogger, economy, landRentalManager);
+                    messages, economy, landRentalManager);
             redstoneTaxCollector.enable();
 
             livestockTaxCollector = new LivestockTaxCollector(this, logger,
-                    messages, database, taxLogger, economy, landRentalManager);
+                    messages, database, economy, landRentalManager);
             livestockTaxCollector.enable();
 
             hopperTaxCollector = new HopperTaxCollector(this, logger, messages,
-                    taxLogger, economy, landRentalManager);
+                    economy, landRentalManager);
             hopperTaxCollector.enable();
 
         } catch (Throwable th) {
@@ -229,11 +222,6 @@ public class Takenomics extends JavaPlugin {
         if (taxOnSavingsCollector != null) {
             taxOnSavingsCollector.disable();
             taxOnSavingsCollector = null;
-        }
-
-        if (taxLogger != null) {
-            taxLogger.disable();
-            taxLogger = null;
         }
 
         if (database != null) {

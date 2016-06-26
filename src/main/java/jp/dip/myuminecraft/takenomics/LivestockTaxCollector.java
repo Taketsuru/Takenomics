@@ -75,7 +75,6 @@ public class LivestockTaxCollector extends PeriodicTaxCollector
     static final long    maxPerTick        = 2 * 1000 * 1000;               // 2ms
     Messages             messages;
     Database             database;
-    TaxLogger            taxLogger;
     Economy              economy;
     LandRentalManager    landRentalManager;
     Set<String>          taxExempt         = new HashSet<String>();
@@ -87,12 +86,11 @@ public class LivestockTaxCollector extends PeriodicTaxCollector
     Iterator<Animals>    entityIter;
 
     public LivestockTaxCollector(JavaPlugin plugin, Logger logger,
-            Messages messages, Database database, TaxLogger taxLogger,
-            Economy economy, LandRentalManager landRentalManager) {
+            Messages messages, Database database, Economy economy,
+            LandRentalManager landRentalManager) {
         super(plugin, logger);
         this.messages = messages;
         this.database = database;
-        this.taxLogger = taxLogger;
         this.economy = economy;
         this.landRentalManager = landRentalManager;
     }
@@ -238,11 +236,6 @@ public class LivestockTaxCollector extends PeriodicTaxCollector
             messages.send(player, "mobTaxNoticeTotal", tax);
         }
 
-        if (0.0 < paid || 0.0 < info.arrears) {
-            taxLogger.put(new LivestockTaxRecord(System.currentTimeMillis(),
-                    payer, untamedCount, tamedCount, info.arrears, paid));
-        }
-
         economy.withdrawPlayer(payer, paid);
 
         info.untamedCount = 0;
@@ -357,7 +350,6 @@ public class LivestockTaxCollector extends PeriodicTaxCollector
     }
 
     boolean isInPlayersLand(Player player, Location location) {
-        UUID playerId = player.getUniqueId();
         ProtectedRegion region = RegionUtil.getHighestPriorityRegion(location);
         return region != null && landRentalManager
                 .findTaxPayer(location.getWorld().getName(), region) != null;

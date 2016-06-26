@@ -60,7 +60,6 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector
     }
 
     Messages             messages;
-    TaxLogger            taxLogger;
     Economy              economy;
     LandRentalManager    landRentalManager;
     TaxTable             taxTable    = new TaxTable();
@@ -68,11 +67,10 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector
     Set<String>          taxExempt   = new HashSet<String>();
 
     public RedstoneTaxCollector(JavaPlugin plugin, Logger logger,
-            Messages messages, TaxLogger taxLogger, Economy economy,
+            Messages messages, Economy economy,
             LandRentalManager landRentalManager) {
         super(plugin, logger);
         this.messages = messages;
-        this.taxLogger = taxLogger;
         this.economy = economy;
         this.landRentalManager = landRentalManager;
     }
@@ -226,11 +224,6 @@ public class RedstoneTaxCollector extends PeriodicTaxCollector
             if (onlinePlayer != null) {
                 messages.send(onlinePlayer, "redstoneTaxCollected", paid);
             }
-        }
-
-        if (0.0 < paid || 0.0 < arrears) {
-            taxLogger.put(new RedstoneTaxRecord(System.currentTimeMillis(),
-                    payer, charge, rate, arrears, paid));
         }
 
         if (0.0 < arrears) {

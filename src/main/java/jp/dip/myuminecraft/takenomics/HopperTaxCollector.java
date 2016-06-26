@@ -69,7 +69,6 @@ public class HopperTaxCollector extends PeriodicTaxCollector
     }
 
     Messages             messages;
-    TaxLogger            taxLogger;
     Economy              economy;
     LandRentalManager    landRentalManager;
     TaxTable             taxTable           = new TaxTable();
@@ -79,11 +78,10 @@ public class HopperTaxCollector extends PeriodicTaxCollector
     List<Chunk>          investigationList  = new ArrayList<Chunk>();
 
     public HopperTaxCollector(JavaPlugin plugin, Logger logger,
-            Messages messages, TaxLogger taxLogger, Economy economy,
+            Messages messages, Economy economy,
             LandRentalManager landRentalManager) {
         super(plugin, logger);
         this.messages = messages;
-        this.taxLogger = taxLogger;
         this.economy = economy;
         this.landRentalManager = landRentalManager;
     }
@@ -217,8 +215,7 @@ public class HopperTaxCollector extends PeriodicTaxCollector
                     continue;
                 }
 
-                UUID payer = landRentalManager.findTaxPayer(worldName,
-                        region);
+                UUID payer = landRentalManager.findTaxPayer(worldName, region);
                 if (payer == null) {
                     continue;
                 }
@@ -297,11 +294,6 @@ public class HopperTaxCollector extends PeriodicTaxCollector
             if (onlinePlayer != null) {
                 messages.send(onlinePlayer, "hopperTaxCollected", paid);
             }
-        }
-
-        if (0.0 < paid || 0.0 < arrears) {
-            taxLogger.put(new HopperTaxRecord(System.currentTimeMillis(),
-                    payer, charge, rate, arrears, paid));
         }
 
         int messageCount = 0;

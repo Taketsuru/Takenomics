@@ -3,7 +3,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>jp.dip.myuminecraft</groupId>
 	<artifactId>Takenomics</artifactId>
-	<version>0.0.9</version>
+	<version>1.0.0</version>
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 	</properties>
@@ -45,6 +45,10 @@
 		<repository>
 			<id>sk89q-repo</id>
 			<url>https://maven.sk89q.com/repo/</url>
+		</repository>
+		<repository>
+			<id>dmulloy2-repo</id>
+			<url>http://repo.dmulloy2.net/content/groups/public/</url>
 		</repository>
 	</repositories>
 	<dependencies>
@@ -90,6 +94,11 @@
 			<groupId>net.ess3</groupId>
 			<artifactId>Essentials</artifactId>
 			<version>2.X-SNAPSHOT</version>
+		</dependency>
+		<dependency>
+			<groupId>com.comphenix.protocol</groupId>
+			<artifactId>ProtocolLib-API</artifactId>
+			<version>4.0</version>
 		</dependency>
 	</dependencies>
 </project>

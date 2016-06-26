@@ -1,12 +1,6 @@
 locale: ja-JP
 
-log:
-  enable: true
-  path: tax.log
-  
 database:
-  enable: false
-  debug: false
   url: jdbc:mysql://localhost:3306/takenomics
   tablePrefix: takenomics_
   user: root
