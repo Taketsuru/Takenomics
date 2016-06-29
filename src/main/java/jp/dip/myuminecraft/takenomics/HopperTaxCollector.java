@@ -47,27 +47,6 @@ public class HopperTaxCollector extends PeriodicTaxCollector
         }
     }
 
-    private static class HopperTaxRecord extends TaxRecord {
-        long   count;
-        double rate;
-        double arrears;
-        double paid;
-
-        HopperTaxRecord(long timestamp, OfflinePlayer player, long count,
-                double rate, double arrears, double paid) {
-            super(timestamp, player);
-            this.count = count;
-            this.rate = rate;
-            this.arrears = arrears;
-            this.paid = paid;
-        }
-
-        protected String subclassToString() {
-            return String.format("hopper %d %f %f %f", count, rate, arrears,
-                    paid);
-        }
-    }
-
     Messages             messages;
     Economy              economy;
     LandRentalManager    landRentalManager;

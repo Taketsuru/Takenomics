@@ -8,9 +8,11 @@ import java.sql.Statement;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
@@ -43,7 +45,6 @@ import com.sk89q.worldedit.bukkit.selections.CuboidSelection;
 import com.sk89q.worldedit.bukkit.selections.Polygonal2DSelection;
 import com.sk89q.worldedit.regions.Region;
 import com.sk89q.worldedit.world.snapshot.Snapshot;
-import com.sk89q.worldedit.world.snapshot.SnapshotRepository;
 import com.sk89q.worldedit.world.snapshot.SnapshotRestore;
 import com.sk89q.worldedit.world.storage.ChunkStore;
 import com.sk89q.worldguard.bukkit.BukkitPlayer;
@@ -54,6 +55,7 @@ import com.sk89q.worldguard.protection.regions.ProtectedCuboidRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedPolygonalRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 
+import jp.dip.myuminecraft.takecore.BlockCoordinates;
 import jp.dip.myuminecraft.takecore.DatabaseTask;
 import jp.dip.myuminecraft.takecore.Logger;
 import jp.dip.myuminecraft.takecore.ManagedSign;
@@ -64,10 +66,10 @@ import jp.dip.myuminecraft.takecore.SignTableListener;
 import jp.dip.myuminecraft.takecore.TakeCore;
 import jp.dip.myuminecraft.takenomics.models.PlayerTable;
 import jp.dip.myuminecraft.takenomics.models.WorldTable;
+
 import net.milkbowl.vault.economy.Economy;
 import net.milkbowl.vault.economy.EconomyResponse;
 import net.milkbowl.vault.economy.EconomyResponse.ResponseType;
-import net.milkbowl.vault.permission.Permission;
 
 public class LandRentalManager implements Listener, SignTableListener {
 
@@ -75,7 +77,7 @@ public class LandRentalManager implements Listener, SignTableListener {
         PENDING, READY, SUSPENDED
     }
 
-    private final class Rental {
+    private static class Rental {
         String      worldName;
         String      regionName;
         int         signX;
@@ -102,7 +104,7 @@ public class LandRentalManager implements Listener, SignTableListener {
         }
     }
 
-    private final class Contract {
+    private static class Contract {
         UUID   tenant;
         String expiration;
         int    prepayment;
@@ -114,7 +116,7 @@ public class LandRentalManager implements Listener, SignTableListener {
         }
     }
 
-    private final class RentalSign extends ManagedSign {
+    private static class RentalSign extends ManagedSign {
         Rental rental;
 
         public RentalSign(SignTableListener owner, Location location,
@@ -124,7 +126,7 @@ public class LandRentalManager implements Listener, SignTableListener {
         }
     }
 
-    private final class TerminatedContract {
+    private static class TerminatedContract {
         String  worldName;
         String  regionName;
         int     fee;
@@ -141,7 +143,7 @@ public class LandRentalManager implements Listener, SignTableListener {
         }
     }
 
-    private final class SignLocation {
+    private static class SignLocation {
         String worldName;
         int    x;
         int    y;
@@ -186,50 +188,51 @@ public class LandRentalManager implements Listener, SignTableListener {
         }
     }
 
-    static final int              currentRentalSchemaVersion   = 1;
-    static final int              currentContractSchemaVersion = 1;
-    static final long             maxTaskExecutionTime         = 20;
-    static final String           header                       = "[re.rental]";
-    static final String           permNodeToCreateSign         = "takenomics.land_rental.create";
-    static final String           permNodeToCreateSignOwn      = "takenomics.land_rental.create.own";
-    static final int              maxFee                       = 9999999;
-    static final int              maxMaxPrepayment             = 9;
-    static final Pattern          feePattern                   = Pattern
+    static final int                  currentRentalSchemaVersion   = 1;
+    static final int                  currentContractSchemaVersion = 1;
+    static final long                 maxTaskExecutionTime         = 20;
+    static final String               header                       = "[re.rental]";
+    static final String               permNodeToCreateSign         = "takenomics.land_rental.create";
+    static final String               permNodeToCreateSignOwn      = "takenomics.land_rental.create.own";
+    static final int                  maxFee                       = 9999999;
+    static final int                  maxMaxPrepayment             = 9;
+    static final Pattern              feePattern                   = Pattern
             .compile("^\\$?[ ]*([1-9][0-9]*)([ ]*/[ ]*[^0-9]*)?$");
-    static final Pattern          maxPrepaymentPattern         = Pattern
+    static final Pattern              maxPrepaymentPattern         = Pattern
             .compile("^[ ]*\\+?[ ]*([1-9][0-9]*)[ ]*$");
-    static final int              dailyMaintenanceTime         = 8;
-    static final SimpleDateFormat dateFormat                   = new SimpleDateFormat(
+    static final int                  dailyMaintenanceTime         = 8;
+    static final SimpleDateFormat     dateFormat                   = new SimpleDateFormat(
             "yyyy-MM-dd");
+    static final int                  priorityIncrement            = 100;
+    static final int                  maxVolume                    = 65536 * 4;
 
-    JavaPlugin                    plugin;
-    Logger                        logger;
-    Messages                      messages;
-    Economy                       economy;
-    Permission                    permission;
-    SignTable                     signTable;
-    Database                      database;
-    String                        rentalTableName;
-    String                        contractTableName;
-    PlayerTable                   playerTable;
-    WorldTable                    worldTable;
-    SnapshotRepository            snapshotRepository;
-    Map<SignLocation, Rental>     signLocationToRental         = new HashMap<>();
-    Map<String, Rental>           rentals                      = new HashMap<>();
-    Map<Location, RentalSign>     loadedSigns                  = new HashMap<>();
+    private JavaPlugin                plugin;
+    private Logger                    logger;
+    private Messages                  messages;
+    private Economy                   economy;
+    private SignTable                 signTable;
+    private Database                  database;
+    private String                    rentalTableName;
+    private String                    contractTableName;
+    private PlayerTable               playerTable;
+    private WorldTable                worldTable;
+    private LandSelectionManager      landSelectionManager;
+    private Map<SignLocation, Rental> signLocationToRental         = new HashMap<>();
+    private Map<String, Rental>       rentals                      = new HashMap<>();
+    private Map<Location, RentalSign> loadedSigns                  = new HashMap<>();
 
     public LandRentalManager(JavaPlugin plugin, Logger logger,
-            Messages messages, Economy economy, Permission permission,
-            Database database, PlayerTable playerTable,
-            WorldTable worldTable) {
+            Messages messages, Economy economy, Database database,
+            PlayerTable playerTable, WorldTable worldTable,
+            LandSelectionManager landSelectionManager) {
         this.plugin = plugin;
         this.logger = logger;
         this.messages = messages;
         this.economy = economy;
-        this.permission = permission;
         this.database = database;
         this.playerTable = playerTable;
         this.worldTable = worldTable;
+        this.landSelectionManager = landSelectionManager;
     }
 
     public void enable() throws Throwable {
@@ -300,25 +303,108 @@ public class LandRentalManager implements Listener, SignTableListener {
             return true;
         }
 
-        boolean perm = player.hasPermission(permNodeToCreateSign);
-        boolean permOwn = player.hasPermission(permNodeToCreateSignOwn);
-        if (!perm && !permOwn) {
+        boolean mayRentAnywhere = player.hasPermission(permNodeToCreateSign);
+        if (!mayRentAnywhere
+                && !player.hasPermission(permNodeToCreateSignOwn)) {
             messages.send(player, "landRentalCreationPermDenied");
+            if (landSelectionManager.isSelected(player)) {
+                landSelectionManager.clearSession(player);
+            }
             return false;
         }
 
-        ProtectedRegion foundRegion = findRegion(player, attachedLocation);
-        if (foundRegion == null) {
+        boolean result = landSelectionManager.isSelected(player)
+                ? mayRentSelectedArea(player, mayRentAnywhere)
+                : mayRentAdjacentRegion(player, attachedLocation,
+                        mayRentAnywhere);
+
+        if (!result && landSelectionManager.isSelected(player)) {
+            landSelectionManager.clearSession(player);
+        }
+
+        return result;
+    }
+
+    private boolean mayRentAdjacentRegion(Player player,
+            Location attachedLocation, boolean mayRentAnywhere) {
+        ProtectedRegion region = getAssociatedRegion(player, attachedLocation);
+        if (region == null) {
             messages.send(player, "landRentalNoRegion");
+            return false;
+        }
+
+        if (!mayRentAnywhere && !region
+                .isOwner(new BukkitPlayer(WorldGuardPlugin.inst(), player))) {
+            messages.send(player, "landRentalRegionNotOwned");
             return false;
         }
 
         World world = attachedLocation.getWorld();
         String worldName = world.getName();
-        String regionName = foundRegion.getId();
+        String regionName = region.getId();
         Rental rental = findRental(worldName, regionName);
         if (rental != null && hasSign(rental)) {
             messages.send(player, "landRentalAlreadyRented");
+            return false;
+        }
+
+        return true;
+    }
+
+    private boolean mayRentSelectedArea(Player player,
+            boolean mayRentAnywhere) {
+        if (maxVolume < landSelectionManager.getSelectedVolume(player)) {
+            messages.send(player, "landRentalRegionTooLarge");
+            return false;
+        }
+
+        World world = player.getWorld();
+        String worldName = world.getName();
+
+        WorldGuardPlugin worldGuard = WorldGuardPlugin.inst();
+        RegionManager regionManager = worldGuard.getRegionManager(world);
+
+        ProtectedRegion enclosingRegion = landSelectionManager
+                .getEnclosingRegion(player);
+        if (!mayRentAnywhere && (enclosingRegion == null || !enclosingRegion
+                .isOwner(new BukkitPlayer(worldGuard, player)))) {
+            messages.send(player, "landRentalSelectionNotInOwnedRegion");
+            return false;
+        }
+
+        ProtectedRegion region = landSelectionManager
+                .createRegionFromSelection(player,
+                        RegionUtil.findUnusedRegionId(world,
+                                enclosingRegion == null ? player.getName()
+                                        : enclosingRegion.getId()));
+
+        List<ProtectedRegion> loadedRentalRegions = new ArrayList<>();
+        for (RentalSign sign : loadedSigns.values()) {
+            Rental rental = sign.rental;
+            if (worldName.equals(rental.worldName)) {
+                ProtectedRegion rentalRegion = regionManager
+                        .getRegion(rental.regionName);
+                if (rentalRegion != null) {
+                    loadedRentalRegions.add(rentalRegion);
+                }
+            }
+        }
+
+        List<ProtectedRegion> intersectingRegions = region
+                .getIntersectingRegions(loadedRentalRegions);
+        if (!intersectingRegions.isEmpty()) {
+            messages.send(player, "landRentalIntersecting");
+            int count = 0;
+            for (ProtectedRegion ir : intersectingRegions) {
+                if (count > 5) {
+                    messages.send(player, "and %d other regions.",
+                            intersectingRegions.size() - count);
+                    break;
+                }
+                messages.send(player, "- %s", ir.getId());
+                ++count;
+            }
+
             return false;
         }
 
@@ -363,10 +449,44 @@ public class LandRentalManager implements Listener, SignTableListener {
             }
 
         } else {
-            ProtectedRegion region = findRegion(player, attachedLocation);
-            if (region == null) {
-                clearSign(lines);
-                return null;
+            ProtectedRegion region;
+
+            if (landSelectionManager.isSelected(player)) {
+                World world = player.getWorld();
+                RegionManager regionManager = WorldGuardPlugin.inst()
+                        .getRegionManager(world);
+
+                ProtectedRegion enclosingRegion = landSelectionManager
+                        .getEnclosingRegion(player);
+
+                String regionName = RegionUtil.findUnusedRegionId(world,
+                        enclosingRegion == null ? player.getName()
+                                : enclosingRegion.getId());
+                region = landSelectionManager.createRegionFromSelection(player,
+                        regionName);
+
+                DefaultDomain owners = new DefaultDomain();
+                if (enclosingRegion != null) {
+                    owners.addAll(enclosingRegion.getOwners());
+                } else {
+                    owners.addPlayer(player.getUniqueId());
+                }
+                region.setOwners(owners);
+
+                if (enclosingRegion != null) {
+                    region.setPriority(
+                            enclosingRegion.getPriority() + priorityIncrement);
+                }
+
+                regionManager.addRegion(region);
+                landSelectionManager.clearSession(player);
+
+            } else {
+                region = getAssociatedRegion(player, attachedLocation);
+                if (region == null) {
+                    clearSign(lines);
+                    return null;
+                }
             }
 
             String worldName = attachedLocation.getWorld().getName();
@@ -572,7 +692,23 @@ public class LandRentalManager implements Listener, SignTableListener {
         return rentals.get(worldName + " " + regionName);
     }
 
-    ProtectedRegion findRegion(Player player, Location attachedLocation) {
+    ProtectedRegion getEnclosingRegion(Player player,
+            Location attachedLocation) {
+
+        BlockCoordinates coords = new BlockCoordinates(
+                attachedLocation.getBlockX(), attachedLocation.getBlockY(),
+                attachedLocation.getBlockZ());
+        BlockProximity proximity = landSelectionManager
+                .getBlockProximity(player, coords);
+        if (proximity == BlockProximity.OFF) {
+            return null;
+        }
+
+        return landSelectionManager.getEnclosingRegion(player);
+    }
+
+    ProtectedRegion getAssociatedRegion(Player player,
+            Location attachedLocation) {
         boolean perm = player.hasPermission(permNodeToCreateSign);
         WorldGuardPlugin worldGuard = WorldGuardPlugin.inst();
         RegionManager wgRegionManager = worldGuard

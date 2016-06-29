@@ -15,7 +15,6 @@ import jp.dip.myuminecraft.takenomics.models.ShopTable;
 import jp.dip.myuminecraft.takenomics.models.TransactionTable;
 import jp.dip.myuminecraft.takenomics.models.WorldTable;
 import net.milkbowl.vault.economy.Economy;
-import net.milkbowl.vault.permission.Permission;
 
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
@@ -42,6 +41,7 @@ public class Takenomics extends JavaPlugin {
     private HopperTaxCollector    hopperTaxCollector;
     private EssentialsShopMonitor essentialsShopMonitor;
     private LandRentalManager     landRentalManager;
+    private LandSelectionManager  landSelectionManager;
 
     @Override
     public void onEnable() {
@@ -60,10 +60,6 @@ public class Takenomics extends JavaPlugin {
             // Vault
             Economy economy = Bukkit.getServicesManager()
                     .getRegistration(net.milkbowl.vault.economy.Economy.class)
-                    .getProvider();
-            Permission permission = Bukkit.getServicesManager()
-                    .getRegistration(
-                            net.milkbowl.vault.permission.Permission.class)
                     .getProvider();
 
             commandDispatcher = new CommandDispatcher(messages,
@@ -124,11 +120,15 @@ public class Takenomics extends JavaPlugin {
                 essentialsShopMonitor = null;
             }
 
+            landSelectionManager = new LandSelectionManager(this, logger,
+                    messages);
+            landSelectionManager.enable();
+
             if (database != null && worldTable != null
                     && playerTable != null) {
                 landRentalManager = new LandRentalManager(this, logger,
-                        messages, economy, permission, database, playerTable,
-                        worldTable);
+                        messages, economy, database, playerTable, worldTable,
+                        landSelectionManager);
                 landRentalManager.enable();
             }
 

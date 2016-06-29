@@ -1,7 +1,7 @@
 name: Takenomics
 main: jp.dip.myuminecraft.takenomics.Takenomics
 version: "${project.version}"
-depend: [Vault, WorldEdit, WorldGuard, Essentials, TakeCore]
+depend: [Vault, ProtocolLib, WorldEdit, WorldGuard, Essentials, TakeCore]
 softdepend: [ChestShop]
 commands:
   takenomics:

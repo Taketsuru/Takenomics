@@ -1,6 +1,7 @@
 package jp.dip.myuminecraft.takenomics;
 
 import org.bukkit.Location;
+import org.bukkit.World;
 
 import com.sk89q.worldguard.bukkit.WorldGuardPlugin;
 import com.sk89q.worldguard.protection.ApplicableRegionSet;
@@ -39,4 +40,17 @@ public class RegionUtil {
         return foundRegion;
     }
 
+    public static String findUnusedRegionId(World world, String prefix) {
+        WorldGuardPlugin worldGuard = WorldGuardPlugin.inst();
+        RegionManager regionManager = worldGuard.getRegionManager(world);
+
+        int seqno = 0;
+        String regionName;
+        do {
+            ++seqno;
+            regionName = String.format("%s_%d_autogen", prefix, seqno);
+        } while (regionManager.hasRegion(regionName));
+        
+        return regionName;
+    }
 }
