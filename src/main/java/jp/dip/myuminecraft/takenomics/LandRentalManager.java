@@ -269,7 +269,6 @@ public class LandRentalManager implements Listener, SignTableListener {
         loadedSigns.clear();
     }
 
-    
     public UUID findTaxPayer(String worldName, ProtectedRegion region) {
         Rental rental = findRental(worldName, region.getId());
         if (rental != null && rental.currentContract != null) {
@@ -1309,7 +1308,7 @@ public class LandRentalManager implements Listener, SignTableListener {
                             endDate.get(Calendar.YEAR),
                             endDate.get(Calendar.MONTH) - Calendar.JANUARY + 1,
                             endDate.get(Calendar.DAY_OF_MONTH));
-            lines[3] = Bukkit.getOfflinePlayer(contract.tenant).getName();
+            lines[3] = playerTable.getNameForUniqueId(contract.tenant);
         }
     }
 }

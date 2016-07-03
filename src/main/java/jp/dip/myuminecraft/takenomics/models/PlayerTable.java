@@ -31,6 +31,8 @@ public class PlayerTable {
     String             tableName;
     Map<UUID, Integer> idCache;
     Map<String, UUID>  nameCache;
+    Map<UUID, String>  uuidToNameCache      = Collections
+            .synchronizedMap(new HashMap<>());
     PreparedStatement  insertEntry;
     PreparedStatement  findEntry;
     PreparedStatement  updateName;
@@ -130,6 +132,7 @@ public class PlayerTable {
                 idCache.put(uuid, rs.getInt(1));
                 if (name != null) {
                     nameCache.put(name.toLowerCase(), uuid);
+                    uuidToNameCache.put(uuid, name);
                 }
             }
         }
@@ -214,6 +217,7 @@ public class PlayerTable {
     public void disable() {
         idCache.clear();
         nameCache.clear();
+        uuidToNameCache.clear();
         if (findEntry != null) {
             try {
                 findEntry.close();
@@ -271,6 +275,10 @@ public class PlayerTable {
     public UUID getUniqueIdForName(String name) {
         return nameCache.get(name.toLowerCase());
     }
+    
+    public String getNameForUniqueId(UUID uuid) {
+        return uuidToNameCache.get(uuid);
+    }
 
     public int enter(Connection connection, UUID uuid, String name)
             throws SQLException {
@@ -318,6 +326,7 @@ public class PlayerTable {
 
         idCache.put(uuid, id);
         nameCache.put(name.toLowerCase(), uuid);
+        uuidToNameCache.put(uuid, name);
 
         return id;
     }
