@@ -43,13 +43,16 @@ public class Database extends jp.dip.myuminecraft.takecore.Database {
         Properties connectionProperties = new Properties();
 
         if (config.contains(configUser)) {
-            connectionProperties.put("user", config.getString(configUser));
+            connectionProperties.setProperty("user",
+                    config.getString(configUser));
         }
 
         if (config.contains(configPassword)) {
-            connectionProperties.put("password",
+            connectionProperties.setProperty("password",
                     config.getString(configPassword));
         }
+
+        connectionProperties.setProperty("rewriteBatchedStatements", "true");
 
         if (!config.contains(configTablePrefix)) {
             tablePrefix = "takenomics_";

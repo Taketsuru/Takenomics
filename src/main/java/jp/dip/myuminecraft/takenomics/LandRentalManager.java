@@ -56,7 +56,6 @@ import com.sk89q.worldguard.protection.regions.ProtectedPolygonalRegion;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 
 import jp.dip.myuminecraft.takecore.BlockCoordinates;
-import jp.dip.myuminecraft.takecore.DatabaseTask;
 import jp.dip.myuminecraft.takecore.Logger;
 import jp.dip.myuminecraft.takecore.ManagedSign;
 import jp.dip.myuminecraft.takecore.Messages;
@@ -188,6 +187,16 @@ public class LandRentalManager implements Listener, SignTableListener {
         }
     }
 
+    private static class RentalId {
+        RentalId(String worldName, String regionName) {
+            this.worldName = worldName;
+            this.regionName = regionName;
+        }
+
+        String worldName;
+        String regionName;
+    }
+
     static final int                  currentRentalSchemaVersion   = 1;
     static final int                  currentContractSchemaVersion = 1;
     static final long                 maxTaskExecutionTime         = 20;
@@ -210,13 +219,13 @@ public class LandRentalManager implements Listener, SignTableListener {
     private Logger                    logger;
     private Messages                  messages;
     private Economy                   economy;
-    private SignTable                 signTable;
     private Database                  database;
-    private String                    rentalTableName;
-    private String                    contractTableName;
     private PlayerTable               playerTable;
     private WorldTable                worldTable;
     private LandSelectionManager      landSelectionManager;
+    private SignTable                 signTable;
+    private String                    rentalTableName;
+    private String                    contractTableName;
     private Map<SignLocation, Rental> signLocationToRental         = new HashMap<>();
     private Map<String, Rental>       rentals                      = new HashMap<>();
     private Map<Location, RentalSign> loadedSigns                  = new HashMap<>();
@@ -246,27 +255,32 @@ public class LandRentalManager implements Listener, SignTableListener {
                     "WorldEdit snapshot repository is not configured.");
         }
 
-        database.submitSync(new DatabaseTask() {
-            @Override
-            public void run(Connection connection)
-                    throws SQLException, MisconfigurationException {
-                rentalTableName = database.getTablePrefix() + "land_rentals";
-                contractTableName = database.getTablePrefix()
-                        + "land_rental_contracts";
-
-                initializeRentalTable(connection);
-                initializeContractTable(connection);
-                processExpiration(connection);
-                loadRentals(connection);
-            }
+        database.submitSync((connection) -> {
+            String prefix = database.getTablePrefix();
+            rentalTableName = prefix + "land_rentals";
+            contractTableName = prefix + "land_rental_contracts";
+            initializeRentalTable(connection);
+            initializeContractTable(connection);
+            processExpiration(connection);
+            loadRentals(connection);
         });
+
+        removeSpuriousRentals();
 
         signTable.addListener(this);
         Bukkit.getPluginManager().registerEvents(this, plugin);
     }
 
     public void disable() {
+        try {
+            database.submitSync((connection) -> {
+                rentalTableName = contractTableName = null;
+            });
+        } catch (Throwable th) {
+            logger.warning(th, "unexpected exception");
+        }
         signTable.removeListener(this);
+        signTable = null;
         signLocationToRental.clear();
         rentals.clear();
         loadedSigns.clear();
@@ -565,26 +579,21 @@ public class LandRentalManager implements Listener, SignTableListener {
                     rental.fee = fee;
                     rental.maxPrepayment = maxPrepayment;
 
-                    database.submitAsync(new DatabaseTask() {
-                        @Override
-                        public void run(Connection connection)
-                                throws SQLException {
-                            try (PreparedStatement stmt = connection
-                                    .prepareStatement(String.format(
-                                            "UPDATE %s AS rental, %s AS world "
-                                                    + "SET rental.fee = ?,"
-                                                    + " rental.max_prepayment = ? "
-                                                    + "WHERE rental.world = world.id"
-                                                    + " AND rental.region = ?"
-                                                    + " AND world.name = ?",
-                                            rentalTableName,
-                                            worldTable.getTableName()))) {
-                                stmt.setInt(1, fee);
-                                stmt.setInt(2, maxPrepayment);
-                                stmt.setString(3, regionName);
-                                stmt.setString(4, worldName);
-                                stmt.execute();
-                            }
+                    database.submitAsync((connection) -> {
+                        try (PreparedStatement stmt = connection
+                                .prepareStatement(String.format(
+                                        "UPDATE %s AS rental, %s AS world "
+                                                + "SET rental.fee = ?, rental.max_prepayment = ? "
+                                                + "WHERE rental.world = world.id"
+                                                + " AND rental.region = ?"
+                                                + " AND world.name = ?",
+                                        rentalTableName,
+                                        worldTable.getTableName()))) {
+                            stmt.setInt(1, fee);
+                            stmt.setInt(2, maxPrepayment);
+                            stmt.setString(3, regionName);
+                            stmt.setString(4, worldName);
+                            stmt.execute();
                         }
                     });
                 }
@@ -627,6 +636,18 @@ public class LandRentalManager implements Listener, SignTableListener {
         if (contract != null) {
             messages.send(player, "landRentalEffectiveSignDestroyed");
             cancelPrepayment(rental);
+        }
+
+        if (rental.regionName.matches("^.*_[0-9]+_autogen$")) {
+            World world = Bukkit.getWorld(rental.worldName);
+            RegionManager rm = WorldGuardPlugin.inst().getRegionManager(world);
+            ProtectedRegion region = rm.getRegion(rental.regionName);
+
+            if (region != null) {
+                rm.removeRegion(rental.regionName);
+            }
+
+            destroyRental(rental);
         }
     }
 
@@ -761,25 +782,22 @@ public class LandRentalManager implements Listener, SignTableListener {
                         location.getBlockY(), location.getBlockZ()), rental);
         rentals.put(worldName + " " + regionName, rental);
 
-        database.submitAsync(new DatabaseTask() {
-            @Override
-            public void run(Connection connection) throws SQLException {
-                try (PreparedStatement stmt = connection
-                        .prepareStatement(String.format(
-                                "INSERT INTO %s "
-                                        + "(world,region,x,y,z,state,fee,max_prepayment) "
-                                        + "SELECT worlds.id,?,?,?,?,'pending',?,? "
-                                        + "FROM %s AS worlds WHERE worlds.name = ?",
-                                rentalTableName, worldTable.getTableName()))) {
-                    stmt.setString(1, regionName);
-                    stmt.setInt(2, location.getBlockX());
-                    stmt.setInt(3, location.getBlockY());
-                    stmt.setInt(4, location.getBlockZ());
-                    stmt.setInt(5, fee);
-                    stmt.setInt(6, maxPrepayment);
-                    stmt.setString(7, worldName);
-                    stmt.execute();
-                }
+        database.submitAsync((connection) -> {
+            try (PreparedStatement stmt = connection
+                    .prepareStatement(String.format(
+                            "INSERT INTO %s "
+                                    + "(world,region,x,y,z,state,fee,max_prepayment) "
+                                    + "SELECT worlds.id,?,?,?,?,'pending',?,? "
+                                    + "FROM %s AS worlds WHERE worlds.name = ?",
+                            rentalTableName, worldTable.getTableName()))) {
+                stmt.setString(1, regionName);
+                stmt.setInt(2, location.getBlockX());
+                stmt.setInt(3, location.getBlockY());
+                stmt.setInt(4, location.getBlockZ());
+                stmt.setInt(5, fee);
+                stmt.setInt(6, maxPrepayment);
+                stmt.setString(7, worldName);
+                stmt.executeUpdate();
             }
         });
 
@@ -799,34 +817,32 @@ public class LandRentalManager implements Listener, SignTableListener {
             clearSign(sign.getLocation().getBlock());
         }
 
-        database.submitAsync(new DatabaseTask() {
-            @Override
-            public void run(Connection connection) throws SQLException {
-                if (rental.currentContract != null) {
-                    try (PreparedStatement stmt = connection
-                            .prepareStatement(String.format(
-                                    "DELETE rental, contract "
-                                            + "FROM %s AS rental LEFT JOIN %s AS contract"
-                                            + " ON contract.id = rental.current_contract"
-                                            + " INNER JOIN %s AS world ON rental.world = world.id"
-                                            + "WHERE world.name = ? AND rental.region = ?",
-                                    rentalTableName, contractTableName,
-                                    worldTable.getTableName()))) {
-                        stmt.setString(1, rental.worldName);
-                        stmt.setString(2, rental.regionName);
-                    }
-                } else {
-                    try (PreparedStatement stmt = connection
-                            .prepareStatement(String.format(
-                                    "DELETE rental "
-                                            + "FROM %s AS contract INNER JOIN %s AS world"
-                                            + " ON world.id = rental.world "
-                                            + "WHERE world.name = ? AND rental.region = ?",
-                                    rentalTableName,
-                                    worldTable.getTableName()))) {
-                        stmt.setString(1, rental.worldName);
-                        stmt.setString(2, rental.regionName);
-                    }
+        database.submitAsync((connection) -> {
+            if (rental.currentContract != null) {
+                try (PreparedStatement stmt = connection
+                        .prepareStatement(String.format(
+                                "DELETE rental, contract "
+                                        + "FROM %s AS rental LEFT JOIN %s AS contract"
+                                        + " ON contract.id = rental.current_contract"
+                                        + " INNER JOIN %s AS world ON rental.world = world.id"
+                                        + "WHERE world.name = ? AND rental.region = ?",
+                                rentalTableName, contractTableName,
+                                worldTable.getTableName()))) {
+                    stmt.setString(1, rental.worldName);
+                    stmt.setString(2, rental.regionName);
+                    stmt.executeUpdate();
+                }
+            } else {
+                try (PreparedStatement stmt = connection
+                        .prepareStatement(String.format(
+                                "DELETE rental "
+                                        + "FROM %s AS rental INNER JOIN %s AS world"
+                                        + " ON world.id = rental.world "
+                                        + "WHERE world.name = ? AND rental.region = ?",
+                                rentalTableName, worldTable.getTableName()))) {
+                    stmt.setString(1, rental.worldName);
+                    stmt.setString(2, rental.regionName);
+                    stmt.executeUpdate();
                 }
             }
         });
@@ -864,21 +880,18 @@ public class LandRentalManager implements Listener, SignTableListener {
             updateSign(rental.sign);
         }
 
-        database.submitAsync(new DatabaseTask() {
-            @Override
-            public void run(Connection connection) throws SQLException {
-                try (PreparedStatement stmt = connection
-                        .prepareStatement(String.format(
-                                "UPDATE %s AS rental, %s AS world"
-                                        + "SET rental.state = ?"
-                                        + "WHERE rental.world = world.id"
-                                        + " AND rental.region = ? AND world.name = ?",
-                                rentalTableName, worldTable.getTableName()))) {
-                    stmt.setString(1, newState.toString().toLowerCase());
-                    stmt.setString(2, rental.regionName);
-                    stmt.setString(3, rental.worldName);
-                    stmt.execute();
-                }
+        database.submitAsync((connection) -> {
+            try (PreparedStatement stmt = connection
+                    .prepareStatement(String.format(
+                            "UPDATE %s AS rental, %s AS world"
+                                    + "SET rental.state = ?"
+                                    + "WHERE rental.world = world.id"
+                                    + " AND rental.region = ? AND world.name = ?",
+                            rentalTableName, worldTable.getTableName()))) {
+                stmt.setString(1, newState.toString().toLowerCase());
+                stmt.setString(2, rental.regionName);
+                stmt.setString(3, rental.worldName);
+                stmt.executeUpdate();
             }
         });
     }
@@ -930,93 +943,81 @@ public class LandRentalManager implements Listener, SignTableListener {
         byte[] uuid = new byte[Constants.sizeOfUUID];
         Database.toBytes(player.getUniqueId(), uuid);
 
-        database.submitAsync(new DatabaseTask() {
-            @Override
-            public void run(Connection connection) throws Throwable {
-                try (PreparedStatement stmt = connection
-                        .prepareStatement(String.format(
-                                "SELECT contract.expiration "
-                                        + "FROM %s AS contract"
-                                        + " JOIN %s AS world ON contract.world = world.id"
-                                        + " JOIN %s AS player ON contract.tenant = player.id "
-                                        + "WHERE contract.state = 'end' AND world.name = ?"
-                                        + " AND contract.region = ? AND player.uuid = ? "
-                                        + "ORDER BY contract.expiration DESC LIMIT 1",
-                                contractTableName, worldTable.getTableName(),
-                                playerTable.getTableName()))) {
-                    stmt.setString(1, rental.worldName);
-                    stmt.setString(2, rental.regionName);
-                    stmt.setBytes(3, uuid);
-                    ResultSet rs = stmt.executeQuery();
-                    if (rs.next()) {
-                        String expiration = rs.getString(1);
-                        new BukkitRunnable() {
-                            @Override
-                            public void run() {
-                                try {
-                                    restoreBlocks(rental.worldName,
-                                            rental.regionName, expiration);
-                                } catch (Throwable e) {
-                                    logger.warning(e,
-                                            "Failed to restore the last block state: "
-                                                    + "world %s region %s",
-                                            rental.worldName,
-                                            rental.regionName);
-                                }
+        database.submitAsync((connection) -> {
+            try (PreparedStatement stmt = connection
+                    .prepareStatement(String.format(
+                            "SELECT contract.expiration "
+                                    + "FROM %s AS contract"
+                                    + " JOIN %s AS world ON contract.world = world.id"
+                                    + " JOIN %s AS player ON contract.tenant = player.id "
+                                    + "WHERE contract.state = 'end' AND world.name = ?"
+                                    + " AND contract.region = ? AND player.uuid = ? "
+                                    + "ORDER BY contract.expiration DESC LIMIT 1",
+                            contractTableName, worldTable.getTableName(),
+                            playerTable.getTableName()))) {
+                stmt.setString(1, rental.worldName);
+                stmt.setString(2, rental.regionName);
+                stmt.setBytes(3, uuid);
+                ResultSet rs = stmt.executeQuery();
+                if (rs.next()) {
+                    String actualExpiration = rs.getString(1);
+                    new BukkitRunnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                restoreBlocks(rental.worldName,
+                                        rental.regionName, actualExpiration);
+                            } catch (Throwable e) {
+                                logger.warning(e,
+                                        "Failed to restore the last block state: "
+                                                + "world %s region %s",
+                                        rental.worldName, rental.regionName);
                             }
-                        }.runTask(plugin);
-                    }
+                        }
+                    }.runTask(plugin);
                 }
             }
         });
 
-        database.submitAsync(new DatabaseTask() {
-            @Override
-            public void run(Connection connection) throws SQLException {
-                connection.setAutoCommit(false);
+        database.submitAsync((connection) -> {
+            connection.setAutoCommit(false);
 
-                try {
-
-                    int contractId = 0;
-                    try (PreparedStatement stmt = connection.prepareStatement(
-                            String.format(
-                                    "INSERT INTO %s "
-                                            + "(region, world, state, tenant, expiration, prepayment) "
-                                            + "SELECT ?, world.id, 'effective', player.id, ?, 0 "
-                                            + "FROM %s AS world JOIN %s AS player "
-                                            + "WHERE world.name = ? AND player.uuid = ?",
-                                    contractTableName,
-                                    worldTable.getTableName(),
-                                    playerTable.getTableName()),
-                            Statement.RETURN_GENERATED_KEYS)) {
-                        stmt.setString(1, rental.regionName);
-                        stmt.setString(2, contract.expiration);
-                        stmt.setString(3, rental.worldName);
-                        stmt.setBytes(4, uuid);
-                        stmt.executeUpdate();
-                        ResultSet rs = stmt.getGeneratedKeys();
-                        rs.next();
-                        contractId = rs.getInt(1);
-                    }
-
-                    try (PreparedStatement stmt = connection
-                            .prepareStatement(String.format(
-                                    "UPDATE %s AS rental, %s AS world "
-                                            + "SET rental.current_contract = ? "
-                                            + "WHERE world.name = ?"
-                                            + " AND rental.world = world.id"
-                                            + " AND rental.region = ?",
-                                    rentalTableName,
-                                    worldTable.getTableName()))) {
-                        stmt.setInt(1, contractId);
-                        stmt.setString(2, rental.worldName);
-                        stmt.setString(3, rental.regionName);
-                        stmt.execute();
-                    }
-                } finally {
-                    connection.setAutoCommit(true);
-                }
+            int contractId = 0;
+            try (PreparedStatement stmt = connection.prepareStatement(
+                    String.format(
+                            "INSERT INTO %s "
+                                    + "(region, world, state, tenant, expiration, prepayment) "
+                                    + "SELECT ?, world.id, 'effective', player.id, ?, 0 "
+                                    + "FROM %s AS world JOIN %s AS player "
+                                    + "WHERE world.name = ? AND player.uuid = ?",
+                            contractTableName, worldTable.getTableName(),
+                            playerTable.getTableName()),
+                    Statement.RETURN_GENERATED_KEYS)) {
+                stmt.setString(1, rental.regionName);
+                stmt.setString(2, contract.expiration);
+                stmt.setString(3, rental.worldName);
+                stmt.setBytes(4, uuid);
+                stmt.executeUpdate();
+                ResultSet rs = stmt.getGeneratedKeys();
+                rs.next();
+                contractId = rs.getInt(1);
             }
+
+            try (PreparedStatement stmt = connection
+                    .prepareStatement(String.format(
+                            "UPDATE %s AS rental, %s AS world "
+                                    + "SET rental.current_contract = ? "
+                                    + "WHERE world.name = ?"
+                                    + " AND rental.world = world.id"
+                                    + " AND rental.region = ?",
+                            rentalTableName, worldTable.getTableName()))) {
+                stmt.setInt(1, contractId);
+                stmt.setString(2, rental.worldName);
+                stmt.setString(3, rental.regionName);
+                stmt.executeUpdate();
+            }
+
+            connection.commit();
         });
     }
 
@@ -1106,22 +1107,18 @@ public class LandRentalManager implements Listener, SignTableListener {
             updateSign(rental.sign);
         }
 
-        database.submitAsync(new DatabaseTask() {
-            @Override
-            public void run(Connection connection) throws SQLException {
-                try (PreparedStatement stmt = connection
-                        .prepareStatement(String.format(
-                                "UPDATE %s AS contract, %s AS world "
-                                        + "SET contract.prepayment = ? "
-                                        + "WHERE contract.world = world.id"
-                                        + " AND world.name = ? AND contract.region = ?",
-                                contractTableName,
-                                worldTable.getTableName()))) {
-                    stmt.setInt(1, newPrepayment);
-                    stmt.setString(2, rental.worldName);
-                    stmt.setString(3, rental.regionName);
-                    stmt.execute();
-                }
+        database.submitAsync((connection) -> {
+            try (PreparedStatement stmt = connection
+                    .prepareStatement(String.format(
+                            "UPDATE %s AS contract, %s AS world "
+                                    + "SET contract.prepayment = ? "
+                                    + "WHERE contract.world = world.id"
+                                    + " AND world.name = ? AND contract.region = ?",
+                            contractTableName, worldTable.getTableName()))) {
+                stmt.setInt(1, newPrepayment);
+                stmt.setString(2, rental.worldName);
+                stmt.setString(3, rental.regionName);
+                stmt.executeUpdate();
             }
         });
     }
@@ -1151,23 +1148,20 @@ public class LandRentalManager implements Listener, SignTableListener {
             updateSign(rental.sign);
         }
 
-        database.submitAsync(new DatabaseTask() {
-            @Override
-            public void run(Connection connection) throws SQLException {
-                try (PreparedStatement stmt = connection
-                        .prepareStatement(String.format(
-                                "UPDATE %s AS contract, %s AS rental, %s AS world "
-                                        + "SET contract.prepayment = 0 "
-                                        + "WHERE rental.current_contract = contract.id"
-                                        + " AND rental.world = world.id"
-                                        + " AND rental.region = ?"
-                                        + " AND world.name = ?",
-                                contractTableName, rentalTableName,
-                                worldTable.getTableName()))) {
-                    stmt.setString(1, rental.regionName);
-                    stmt.setString(2, rental.worldName);
-                    stmt.execute();
-                }
+        database.submitAsync((connection) -> {
+            try (PreparedStatement stmt = connection
+                    .prepareStatement(String.format(
+                            "UPDATE %s AS contract, %s AS rental, %s AS world "
+                                    + "SET contract.prepayment = 0 "
+                                    + "WHERE rental.current_contract = contract.id"
+                                    + " AND rental.world = world.id"
+                                    + " AND rental.region = ?"
+                                    + " AND world.name = ?",
+                            contractTableName, rentalTableName,
+                            worldTable.getTableName()))) {
+                stmt.setString(1, rental.regionName);
+                stmt.setString(2, rental.worldName);
+                stmt.executeUpdate();
             }
         });
     }
@@ -1272,7 +1266,7 @@ public class LandRentalManager implements Listener, SignTableListener {
             ResultSet rs = stmt.executeQuery(String.format(
                     "SELECT world.name, rental.region, rental.x, rental.y, rental.z,"
                             + " rental.state, rental.fee, rental.max_prepayment,"
-                            + " player.uuid, contract.expiration, contract.prepayment "
+                            + " player.uuid, contract.expiration, contract.prepayment, rental.world "
                             + "FROM %s AS rental JOIN %s AS world ON rental.world = world.id"
                             + " LEFT JOIN %s AS contract ON rental.current_contract = contract.id"
                             + " LEFT JOIN %s AS player ON contract.tenant = player.id",
@@ -1299,10 +1293,117 @@ public class LandRentalManager implements Listener, SignTableListener {
                                 prepayment);
                 rental.currentContract = contract;
                 rentals.put(worldName + " " + regionName, rental);
-                signLocationToRental.put(new SignLocation(worldName, x, y, z),
-                        rental);
+                SignLocation location = new SignLocation(worldName, x, y, z);
+                if (signLocationToRental.containsKey(location)) {
+                    logger.warning(
+                            "sign locations of rental '%s' and '%s' "
+                                    + "are the same with each other.",
+                            regionName,
+                            signLocationToRental.get(location).regionName);
+                }
+                signLocationToRental.put(location, rental);
             }
         }
+    }
+
+    void removeSpuriousRentals() throws Throwable {
+        WorldGuardPlugin worldGuard = WorldGuardPlugin.inst();
+        List<RentalId> spuriousRentals = new ArrayList<>();
+
+        for (Rental rental : rentals.values()) {
+            boolean hasAutoGeneratedRegion = rental.regionName
+                    .matches("^.*_[0-9]+_autogen$");
+            SignLocation location = new SignLocation(rental.worldName,
+                    rental.signX, rental.signY, rental.signZ);
+
+            boolean spurious = false;
+            World world = Bukkit.getWorld(rental.worldName);
+            RegionManager rm = worldGuard.getRegionManager(world);
+            ProtectedRegion region = rm.getRegion(rental.regionName);
+
+            if (region == null) {
+                spurious = true;
+
+            } else {
+                BlockState state = world
+                        .getBlockAt(rental.signX, rental.signY, rental.signZ)
+                        .getState();
+                if (hasAutoGeneratedRegion && !(state instanceof Sign)) {
+                    rm.removeRegion(rental.regionName);
+                    spurious = true;
+                }
+            }
+
+            if (spurious) {
+                logger.info("Deleting spurious rental %s in world %s",
+                        rental.regionName, rental.worldName);
+                spuriousRentals.add(
+                        new RentalId(rental.worldName, rental.regionName));
+                if (signLocationToRental.get(location) == rental) {
+                    signLocationToRental.remove(location);
+                }
+            }
+        }
+
+        if (spuriousRentals.isEmpty()) {
+            return;
+        }
+
+        for (RentalId id : spuriousRentals) {
+            rentals.remove(id.worldName + " " + id.regionName);
+        }
+
+        database.submitSync((connection) -> {
+            connection.setAutoCommit(false);
+
+            try (Statement stmt = connection.createStatement()) {
+                stmt.executeUpdate(String
+                        .format("CREATE TEMPORARY TABLE IF NOT EXISTS spurious_rentals ("
+                                + "region VARCHAR(255) NOT NULL,"
+                                + "world VARCHAR(50) CHARACTER SET ascii NOT NULL,"
+                                + "PRIMARY KEY (region, world))"));
+
+                try (PreparedStatement insert = connection
+                        .prepareStatement(String.format(
+                                "INSERT INTO spurious_rentals VALUES (?,?)"))) {
+                    int batchSize = 0;
+                    int batchLimit = 1000;
+                    for (RentalId id : spuriousRentals) {
+                        insert.setString(1, id.regionName);
+                        insert.setString(2, id.worldName);
+                        insert.addBatch();
+                        if (batchLimit <= ++batchSize) {
+                            batchSize = 0;
+                            insert.executeBatch();
+                        }
+                    }
+                    if (batchSize != 0) {
+                        insert.executeBatch();
+                    }
+                }
+
+                stmt.executeUpdate(String.format(
+                        "DELETE contracts FROM spurious_rentals JOIN %s AS worlds "
+                                + "ON spurious_rentals.world = worlds.name "
+                                + "JOIN %s AS contracts "
+                                + "ON worlds.id = contracts.world "
+                                + "AND spurious_rentals.region = contracts.region",
+                        worldTable.getTableName(), contractTableName));
+
+                stmt.executeUpdate(String.format(
+                        "DELETE rentals FROM spurious_rentals JOIN %s AS worlds "
+                                + "ON spurious_rentals.world = worlds.name "
+                                + "JOIN %s AS rentals "
+                                + "ON worlds.id = rentals.world "
+                                + "AND spurious_rentals.region = rentals.region",
+                        worldTable.getTableName(), rentalTableName));
+
+                connection.commit();
+
+                stmt.executeUpdate("DROP TEMPORARY TABLE spurious_rentals");
+            }
+        });
+
     }
 
     void processExpiration(Connection connection) throws SQLException {
